@@ -1,0 +1,50 @@
+{
+  "name": "@agent-peers/cli",
+  "version": "0.1.0",
+  "description": "agent-peers CLI: installer, join, hub, invite, shell commands",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonacy/agent-peers.git",
+    "directory": "packages/cli"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-peers/protocol": "workspace:*",
+    "@agent-peers/core": "workspace:*",
+    "@agent-peers/hub": "workspace:*",
+    "@agent-peers/bridge": "workspace:*",
+    "commander": "^15.0.0",
+    "@clack/prompts": "^1.8.1",
+    "@vercel/detect-agent": "^1.2.6",
+    "smol-toml": "^1.9.1",
+    "jsonc-parser": "^3.3.1"
+  },
+  "bin": {
+    "agent-peers": "./dist/bin.js"
+  }
+}

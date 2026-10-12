@@ -1,0 +1,47 @@
+{
+  "name": "@agent-peers/hub",
+  "version": "0.1.0",
+  "description": "agent-peers hub: relay, presence, rooms, asks, storage, admin API",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonacy/agent-peers.git",
+    "directory": "packages/hub"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@agent-peers/protocol": "workspace:*",
+    "hono": "^4.13.13",
+    "@hono/node-server": "^2.1.4",
+    "ws": "^8.22.0",
+    "ulid": "^3.0.2"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2",
+    "@agent-peers/core": "workspace:*"
+  }
+}
