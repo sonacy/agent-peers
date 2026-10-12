@@ -190,8 +190,10 @@ describe('codex bridge with the queue injector', () => {
     expect(argv).toHaveLength(1)
     expect(argv[0]?.slice(0, 4)).toEqual(['queue', '--thread', 't-1', '--message'])
     expect(argv[0]?.[4]).toContain(`ask_id ${asked.id}`)
-    expect(queue.deliveries[0]?.thread).toBe('t-1')
-    expect(session()?.tier).toBe('push')
+    // The fake codex logs argv before it exits; the injector records the delivery after exit.
+    const delivery = await eventually(async () => queue.deliveries[0])
+    expect(delivery.thread).toBe('t-1')
+    await eventually(async () => (session()?.tier === 'push' ? true : undefined))
     // Queued, not yet running: the ask is not in a peer turn and is not leased (Codex owns it).
     expect(session()?.queue.peerTurn).toBeNull()
     expect(session()?.queue.nextLeaseExpiry()).toBeUndefined()
