@@ -1,4 +1,4 @@
-#!/usr/bin/env node
-import { PACKAGE_NAME } from './index.js'
+#!/usr/bin/env bun
+import { PACKAGE_NAME } from './index'
 
-console.log(PACKAGE_NAME)
+process.stdout.write(`${PACKAGE_NAME}\n`)

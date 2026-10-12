@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { PACKAGE_NAME } from '../src/index.js'
+import { describe, expect, it } from 'bun:test'
+import { PACKAGE_NAME } from '../src/index'
 
 describe('protocol', () => {
   it('exports its package name', () => {

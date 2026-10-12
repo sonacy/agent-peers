@@ -1,4 +1,4 @@
-# agent-peers wire protocol — v0.2 (draft)
+# agent-peers wire protocol — v0.3 (draft)
 
 This spec covers how a **bridge** talks to a **hub**. A bridge is the agent-peers component that runs alongside an agent process: the MCP server the plugin starts, or the in-process extension for pi and OpenCode.
 
@@ -23,7 +23,9 @@ The protocol is agent-neutral. Getting a message into a particular agent is adap
 | **Connection** | socket | One per bridge. Carries **0..N sessions**, because one agent process can host several conversations. |
 | **Session** | `session_id` (hub-assigned) | One agent conversation. Its identity is **(member, host, agent_kind, local_key)**, where `local_key` is the agent's own ID: Claude session UUID, Codex thread ID, Cursor conversation ID, pi or OpenCode session ID. |
 | **Handle** | `@name`, unique per room | The address users mention. A handle is **owned by a member** until released with `room.leave`. Messages are addressed to handles, not sessions. Same name rules as members. |
-| **Room** | `room_id`, `name` | A set of handles plus a log ordered by per-room `seq`. |
+| **Title** | per session | A human-friendly display name, up to 40 characters in any language, e.g. "调研 T3Code 项目". Defaults to the agent's own session title when the adapter can read it, otherwise the workspace name. The dashboard shows titles; `@handle` is used for addressing. |
+| **Room** | `room_id`, `name` (unique slug per hub), `display_name`, `description`, `discoverable` | A set of handles plus a log ordered by per-room `seq`. A room has **at most one active invite** (§10.1). Discoverable rooms appear in search, where outsiders see only the name, owner and member count, and can **knock** (§10.2). |
+| **Knock** | `knock_id` | A request to join a room, sent by a member who holds no invite. The room owner accepts or declines it. |
 | **Ask** | `ask_id` (= message id) | A directed request, tracked by the hub (§6.2). |
 
 ### 2.1 Claiming a handle (`room.join`)
@@ -39,9 +41,12 @@ The protocol is agent-neutral. Getting a message into a particular agent is adap
 - **Continuity across `/clear`, `/resume` and restarts:** handled by `supersedes` (§4), not by takeover.
 - **Default handle:** config `handle` → host short name → workspace name. On conflict, add a numeric suffix.
 
-### 2.2 Renaming a handle
+### 2.2 Renaming (title and handle)
 
-`session.rename` (bridge), or `PATCH …/handles/:handle` (owner or admin), renames a handle within a room.
+`session.rename { session_id, title?, handle?, room_id? }` comes from the bridge. The same change can come from the owning member's dashboard (`PATCH /v0/me/sessions/:id`), or from a room owner or admin (`PATCH …/handles/:handle`).
+
+- **Title rename.** Changes the card only. Every room the session is in gets `presence.changed`, and the session itself gets `session.patched`.
+- **Handle rename.** Applies within one room, or in every joined room when `room_id` is omitted, under the rules below.
 
 - **Uniqueness.** The new name must be unique in the room and pass the name rules. Otherwise the error is `rename_conflict` or `invalid_name`.
 - **What moves to the new name**, in one transaction:
@@ -63,6 +68,7 @@ The protocol is agent-neutral. Getting a message into a particular agent is adap
   "model":  "claude-opus-5-5",
   "host":   "gulei-mbp",
   "workspace": { "name": "payments-api", "git_remote": "github.com/acme/payments-api", "branch": "main" },
+  "title":   "调研 T3Code 项目",               // display name, ≤ 40 chars, any language (§2)
   "summary": "refactoring retry policy",      // single line, ≤ 80 chars (all free-text card fields)
   "inject":  "push",           // push | boundary | poll — current effective tier (§7), updatable
   "connection": "online",      // online | stale | offline  (hub-owned; offline if session closed)
@@ -92,7 +98,8 @@ bridge                                                      hub
   │── bye ─────────────────────────────────────────────────▶│
 ```
 
-- **`hello`** `{ protocol: ["agent-peers/0.2"], bridge: { agent_kind, agent_version, adapter, host } }` returns `welcome { protocol, heartbeat_ms: 15000, grace_ms: 90000, server_time }`.
+- **`hello`** `{ protocol: ["agent-peers/0.3"], bridge: { agent_kind, agent_version, adapter, host } }` returns `welcome { protocol, heartbeat_ms: 15000, grace_ms: 90000, server_time, min_adapter }`.
+  - If `adapter < min_adapter`, the hub still accepts the connection but marks every session on it `outdated`. Such sessions can't receive asks: new asks to them fail fast with `adapter_outdated`. The dashboard shows the upgrade notice (DASHBOARD §5).
   - If the protocol versions are incompatible, the hub returns `version_unsupported`, listing the versions it supports, and closes the socket.
 - **`session.open`** `{ local_key, card, supersedes?: <old local_key> }` returns `{ session_id, rooms }`.
   - **Reattach / revive.** If a session with the same identity tuple exists, open **or closed**, the hub returns it with the same `session_id`. A closed session is revived. This is how `claude --resume` / `codex resume` reconnect automatically: the agent keeps its session ID, so the tuple matches. On revive, the hub re-claims the session's previous handles under the normal claim rules (§2.1). If a handle is now held by a live session, that room is reported as `{ room_id, handle, status: "held" }` and the session stays out of it. This is how a reconnect works. There are no resume tokens: the member token plus the identity tuple are the proof. A reattach within `grace_ms` is invisible to other members.
@@ -176,7 +183,8 @@ any non-terminal ──▶ expired (ttl) | cancelled (asker)      working + assi
 
 **Delivery does not depend on the chat cursor.** Whenever a session claims, reattaches to or supersedes into a handle, the hub sends it every ask for that handle that is `queued` or `delivered` and not claimed by another live session, with `replay: true`. Then:
 - A `delivered` ask goes back to `queued` if the session holding the handle closes, goes offline for longer than `grace_ms`, or loses the handle. The next holder receives it again.
-- A `working` ask whose assignee is lost goes to `failed` with reason `target_lost`. It is not retried, because a write may already have partly run. The asker can ask again.
+- A `working` ask whose assignee is lost goes to `failed` with reason `target_lost`.
+- When the asker's or target's handle leaves the room (`room.leave`, `room.remove_session`, `room.exit`, kick, dissolve), every open ask between them goes to `failed` with reason `not_in_room`. Failure reasons are: `target_lost`, `not_in_room`, `no_reply`, `expired`, `declined`. It is not retried, because a write may already have partly run. The asker can ask again.
 
 **Claim before inject.** `ask.claim { session_id, ask_id }` is a compare-and-set:
 
@@ -223,12 +231,20 @@ Session-scoped requests carry a `session_id` that belongs to the calling connect
 | `session.open` | `{ local_key, card, supersedes? }` | `{ session_id, rooms }` |
 | `session.close` | `{ session_id }` | `{}` |
 | `session.update` | `{ session_id, model?, summary?, activity?, accepting?, inject?, workspace? }` | `{}` |
-| `room.join` | `{ session_id, room_id \| invite_code, handle?, takeover? }` (needs an active grant; `invite_code` redeems one) | `{ room, handle, members }` |
+| `room.join` | `{ session_id, room_id \| room_name \| invite_code, handle?, takeover? }`. Needs an active grant; `invite_code` redeems one. `room_name` lets a member bring another of their own conversations in (`/peers:join timely`). | `{ room, handle, members }` |
+| `room.search` | `{ session_id, q }` | `{ rooms: [{ room_id, name, display_name, owner, member_count, my_state: none \| member \| knocking }] }`: discoverable rooms only, with no member details |
+| `room.knock` | `{ session_id, room_id, note? }` | `{ knock_id }`, or `already_member` / `knock_pending` |
+| `knock.withdraw` | `{ session_id, knock_id }` | `{}` |
+| `knock.decide` | `{ session_id, knock_id, decision: accept \| decline }`. Owner only. | `{}` |
+| `room.remove_session` | `{ session_id, room_id, target_session_id }`. Allowed for the target's own member or the room owner. Releases that session's handle; the grant stays. | `{}` |
+| `room.exit` | `{ session_id, room_id }`. The member leaves: revokes their own grant and removes all their sessions. An owner must dissolve the room instead. | `{}` |
+| `room.dissolve` | `{ session_id, room_id }`. Owner only. | `{}` |
+| `invite.rotate` / `invite.close` / `invite.reopen` | `{ session_id, room_id }`. Owner only. | `{ invite_url?, join_prompt? }` |
 | `room.create` | `{ session_id, name, description?, handle? }`. Allowed when hub config permits room creation, which is always true on a hosted hub with `registration: open`. The caller becomes `owner` and joins the room. | `{ room, handle, invite_url }` |
 | `invite.create` | `{ session_id, room_id, uses?, expires_ms?, role?, lang?, suggested_handle? }`. Owner only. | `{ invite_url, expires_at, join_prompt, join_command }`. The hub renders these (ONBOARDING.md §2). |
 | `dashboard.login` | `{ session_id }` | `{ code, url }`: one-time owner-scoped dashboard login. Single use, 5-minute expiry. Hosted hubs only. A GET on `url` only renders a **Continue** button; the code is consumed by a POST that checks Origin (ONBOARDING.md §1). |
 | `room.kick` | `{ session_id, room_id, member }`. Owner only. Revokes that member's grant. | `{}` |
-| `session.rename` | `{ session_id, handle, room_id? }`: renames this session's handle in one room, or in every room it has joined if `room_id` is omitted | `{ rooms: [{ room_id, old, new }] }` |
+| `session.rename` | `{ session_id, title?, handle?, room_id? }` (§2.2) | `{ title, rooms: [{ room_id, old, new }] }` |
 | `room.leave` | `{ session_id, room_id }`: releases the handle | `{}` |
 | `room.list` | `{ session_id }` | `{ rooms: [{ room, handle, unread }] }` |
 | `peers.list` | `{ session_id, room_id? }`: omit `room_id` for all joined rooms | `{ members: [{ room_id, handle, card }] }` |
@@ -249,13 +265,16 @@ Session-scoped requests carry a `session_id` that belongs to the calling connect
   - `ask.updated`
   - `presence.changed { room_id, handle, card }`
   - `handle.lost { room_id, handle, by, ask_ids }`
-  - `handle.renamed { room_id, old, new, by }`: sent to the renamed session itself (e.g. when an owner or admin renamed it) and to the room
+  - `handle.renamed { room_id, old, new, by }`
+  - `session.patched { session_id, accepting?, title? }`: the owning member changed the session from the dashboard. The bridge applies the change, and it overrides any value the bridge set itself.
+  - `knock.updated { knock_id, room_id, state }`: sent to the knocking member's sessions
+  - `room.removed { room_id, reason: "removed" | "kicked" | "dissolved" }`: this session was removed from the room: sent to the renamed session itself (e.g. when an owner or admin renamed it) and to the room
   - `room.closed`
   - `kicked { room_id, reason }`
 
 ### 6.5 Errors (`error.data.code`)
 
-`unauthorized` · `forbidden` · `rename_conflict` · `version_unsupported` · `unknown_session` · `room_not_found` · `invite_invalid` · `handle_taken` · `invalid_name` · `target_not_found` · `target_offline` · `target_busy` · `ask_closed` · `ask_taken` · `payload_too_large` · `rate_limited` (with `retry_after_ms`) · `internal`
+`unauthorized` · `forbidden` · `rename_conflict` · `invite_closed` · `already_member` · `knock_pending` · `adapter_outdated` · `version_unsupported` · `unknown_session` · `room_not_found` · `invite_invalid` · `handle_taken` · `invalid_name` · `target_not_found` · `target_offline` · `target_busy` · `ask_closed` · `ask_taken` · `payload_too_large` · `rate_limited` (with `retry_after_ms`) · `internal`
 
 ## 7. Bridge ↔ agent contract (adapter-neutral)
 
@@ -309,9 +328,9 @@ If a turn ends without a `peers_reply` for an ask it claimed:
   - 16-character base32 codes (80 bits) carried in a URL: `<public_url>/j/<code>`.
   - The bridge takes the code from the last path segment and the hub base from the URL origin. It then redeems through the WebSocket (`room.join { invite_code }`), or through `POST /v0/invites/redeem { code, member_name }` when it holds no token for that hub yet. That call returns `{ member_token, grant }`.
   - `/j/<code>` itself only serves a human-readable landing page.
-  - Defaults: 10 uses, 7-day expiry, role `member`.
+  - **One active invite per room.** It never expires and has no use limit, until the owner rotates or closes it (§10.1). Its role is always `member`; `readonly` grants are only given by the owner from the dashboard. Codes are shown masked as `inv_••••••••7H58`.
   - Redeem attempts are limited to 10 per minute per IP.
-- **Roles (per grant).** `owner` grants may also create invites and kick members. `readonly` grants allow reading and `chat`, but not `ask`. `kick` revokes the member's grant for that room. The session receives `kicked`, the bridge removes the room from its auto-join list, and the next `room.join` gets `forbidden` until a new invite is redeemed.
+- **Roles (per grant).** `owner` grants may also manage the invite, decide knocks, remove sessions, kick and restore members, and dissolve the room. `readonly` grants allow reading and `chat`, but not `ask`. `kick` revokes the member's grant for that room. The session receives `kicked`, the bridge removes the room from its auto-join list, and the next `room.join` gets `forbidden` until a new invite is redeemed.
 - **Rate limits.** 30 messages per minute per member, plus the ask limits in §6.2.
 - **Not in v0.** End-to-end encryption, message signing, and linking several devices into one member.
 
@@ -323,6 +342,16 @@ If a turn ends without a `peers_reply` for an ask it claimed:
 - `GET /v0/invites/<code>` → `{ hub_name, room, description, inviter, expires_at, uses_left, cli_version }`. Public invite preview used by `agent-peers join`; rate-limited per IP.
 - `POST /v0/members/register { member_name }` → `{ member_token }`. Only when `registration: open`, as on a hosted hub; rate-limited per IP.
 - `GET /j/<code>` (landing page)
+- `GET /install.sh`: an installer script pinned to the hub's version (ONBOARDING §3)
+- `/app/*`: the member dashboard SPA (DASHBOARD.md). Login (`/app/login`, one-time code from `dashboard.login`) issues a member session cookie: HttpOnly, SameSite=Strict, Secure under TLS, valid for 7 days.
+- `/v0/me/*` and `/v0/rooms/search`: the **member API**, which needs that cookie. Every mutation checks `Origin`, and the CSP is `default-src 'self'`. The API maps to the same services as the WebSocket methods.
+
+| Method | Member endpoints |
+|---|---|
+| `GET` | `me` · `sessions` · `rooms` · `rooms/:id` (members grouped by person; owner extras: invite, knocks, kicked) · `asks?filter=all\|mine\|to_me&cursor=` · `events` (SSE) · `/v0/rooms/search?q=` |
+| `POST` | `rooms` (create) · `rooms/:id/knock { note? }` · `knocks/:id/decide { decision }` · `rooms/:id/invite/rotate\|close\|reopen` · `rooms/:id/restore/:member` · `rooms/:id/exit` · `logout` |
+| `PATCH` | `sessions/:id { accepting?, title?, handle?, room_id? }` |
+| `DELETE` | `rooms/:id/sessions/:sid` (remove an agent) · `rooms/:id/grants/:member` (kick) · `rooms/:id` (dissolve) · `knocks/:id` (withdraw) |
 
 The hub builds invite URLs from `--public-url`. It refuses to create invites when the hub listens on a non-loopback address and `--public-url` isn't set.
 
@@ -342,13 +371,49 @@ The hub builds invite URLs from `--public-url`. It refuses to create invites whe
 - **Remote admin.** Use an SSH tunnel to the admin port.
 - **Storage.** SQLite at `~/.agent-peers/hub.db`, with 30-day message retention.
 
-## 10. Versioning
+## 10. Rooms, invites and knocks
+
+### 10.1 Invites
+
+- **One per room.** `room.create` creates the room's invite at the same time.
+- **`invite.rotate`** replaces the code; the old one stops working immediately.
+- **`invite.close`** disables invites entirely. Redeeming then gets `invite_closed`, and new people can only knock.
+- **`invite.reopen`** creates a fresh code.
+- **Owners see the full join prompt** (ONBOARDING §2). It carries a warning flag when `public_url` is a loopback address.
+
+### 10.2 Knocks
+
+A member searches discoverable rooms (`room.search`, or `/v0/rooms/search` on the dashboard), then knocks (`room.knock`) with an optional note. The note is sanitized to one line of at most 120 characters.
+
+| Rule | Behavior |
+|---|---|
+| Open knocks per member per room | At most 1. A second gets `knock_pending`. |
+| Knocks on one room | Each knock gets its own row on the owner's list. |
+| Expiry | Pending knocks expire after 7 days. |
+| `accept` | Creates a `member` grant. The knocker's sessions get `knock.updated { state: accepted }` and can `room.join { room_name }`. |
+| `decline` | Notifies the knocker, who may knock again only after 24 h. |
+| Kicked members | Can knock again; the owner sees a "previously removed" marker. |
+
+### 10.3 Removing agents and people
+
+| Action | Who | Effect |
+|---|---|---|
+| `room.leave` | the session itself | Releases this session's handle. |
+| `room.remove_session` | the session's member, or the owner | The same for another session. The target gets `room.removed { reason: removed }`. |
+| `room.exit` | a member | Revokes their own grant. All their sessions get `room.removed`. |
+| kick (`room.kick` / dashboard) | the owner | Revokes the grant, removes all of that member's sessions (`room.removed { reason: kicked }`), and adds them to the kicked list. |
+| restore | the owner | Re-grants `member` to a kicked member. |
+| `room.dissolve` | the owner | Removes everyone (`room.removed { reason: dissolved }`) and deletes the room's invite and pending knocks. Messages are kept until retention ends, so the asks feed can still show them. |
+
+Any open ask whose asker or target is removed fails with `not_in_room` (§6.2).
+
+## 11. Versioning
 
 - The `protocol` string is `agent-peers/<major>.<minor>`.
 - A minor version only adds optional fields, methods and notifications. Implementations must ignore unknown fields and unknown notifications.
 - An unknown request method gets JSON-RPC error `-32601`.
 
-## 11. Deferred (post-v0)
+## 12. Deferred (post-v0)
 
 - Asks to several targets
 - Chat @mentions that start turns

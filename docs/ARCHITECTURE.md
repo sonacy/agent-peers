@@ -62,8 +62,10 @@ It works across agent products. Wire protocol: [`PROTOCOL.md`](./PROTOCOL.md). P
 | Command | Tool | Effect |
 |---|---|---|
 | join `<invite> [as <handle>]` | `peers_join` | Redeem the invite if needed, join, claim the handle. "Remember for this workspace" adds the room to `~/.agent-peers/autojoin.json`. |
-| create `<room>` | `peers_create` | Create a room on the default hub (you become its owner) and return an invite URL. |
-| invite `[room]` | `peers_invite` | Owner only: mint another invite. |
+| room new `<name>` | `peers_create` | Create a room on the default hub. You become its owner, and the tool returns the join prompt to share. |
+| invite `[room]` | `peers_invite` | Owner only: show the room's join prompt, or rotate it (`--new`). |
+| knock `<room> [note]` | `peers_knock` | Ask to join a discoverable room you have no invite for. |
+| dashboard | `peers_dashboard` | Open the web dashboard, already signed in (one-time login link). |
 | who `[room]` | `peers_who` | All joined rooms by default: handle, connection, activity, agent, model, summary, tier. This is how you find handles. |
 | ask `@handle[@room] <question> [--write]` | `peers_ask` | Send an ask, then wait inline (default 45 s, always below the client's tool timeout) while showing the target's state. On timeout returns `pending · @work: online, busy, push`. The reply is injected later. If the handle exists in several rooms, the tool lists them and needs `@handle@room`. |
 | say `<text>` | `peers_send` | Room chat. Inbox only. Never starts a turn. |
@@ -320,13 +322,45 @@ Binding `0.0.0.0:7337` makes the hub reachable **only from the same LAN**. For t
 - Unattended targets: recommend the read-only allowlist so peer turns don't stall on approval prompts. When a peer turn does hit a local prompt, the bridge reports `awaiting_input` and sends `progress: "waiting for local approval"`, which the asker sees.
 - Not in v0: end-to-end encryption and signing.
 
-## 9. Tech stack
+## 9. Tech stack and packaging
 
-- TypeScript, pnpm-workspace monorepo.
-- Hub on Bun: `Bun.serve` WebSocket, `bun:sqlite`, `bun build --compile` for a single binary, plus a Docker image. It also runs on Node.
-- Bridge and CLI on Node ≥ 20.
-- Libraries: zod, `@modelcontextprotocol/sdk` 1.x, `@clack/prompts`. Dashboard is Preact.
-- `add-mcp` (Apache-2.0) as a library for MCP-only fallback installs.
+**Bun everywhere** (decided 2026-10-11)
+
+| Area | Choice |
+|---|---|
+| Runtime, package manager and workspaces | Bun 1.3+, with `bun.lock` |
+| Tests | `bun test`, with coverage thresholds in `bunfig.toml` |
+| Bundler | `bun build` |
+| Lint and format | Biome |
+| Type checking | TypeScript 5.9 (`tsc --noEmit`) |
+
+**Hub.** `Bun.serve`: native WebSocket, with each room's fan-out as a WebSocket pub/sub topic. Hono handles HTTP routing, and `bun:sqlite` handles storage.
+
+**Core.** Uses the global `WebSocket` client. There is no `ws` dependency.
+
+**Bridge.** `@modelcontextprotocol/sdk` 1.x over stdio, plus zod.
+
+**CLI.** commander, `@clack/prompts`, `@vercel/detect-agent`, smol-toml, jsonc-parser.
+
+**Dashboard.** React 19, Tailwind v4 and shadcn/ui (Radix), with motion, TanStack Query/Virtual and lucide-react.
+- Bundled through Bun HTML imports plus `bun-plugin-tailwind`.
+- In development, `Bun.serve` routes provide HMR.
+- In production, the dashboard is embedded in the binary.
+- Spec: [`DASHBOARD.md`](./DASHBOARD.md).
+
+**One binary.** `bun build --compile` produces `agent-peers`, a single executable that contains the CLI, bridge (`agent-peers mcp`), hook entrypoint (`agent-peers hook`), hub (`agent-peers hub`) and dashboard assets. Users need **neither Node nor Bun**, which removes every "node not on PATH" and wrong-version problem inside agent plugins.
+
+**Release targets.** `darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`, `windows-x64`.
+
+**Distribution**
+
+| Channel | Details |
+|---|---|
+| GitHub Releases | Binaries, plus `install.sh` (`curl -fsSL …/install.sh \| sh`) |
+| npm `@agent-peers/cli` | A thin launcher with `optionalDependencies` on `@agent-peers/cli-<platform>` packages, the pattern Biome and esbuild use, so `npx` and `bunx @agent-peers/cli …` work |
+| Docker `ghcr.io/sonacy/agent-peers-hub` | Distroless base, runs `agent-peers hub` |
+
+The installer copies the running binary to `~/.agent-peers/bin/agent-peers-<version>` and points the plugin shims at it.
 
 ## 10. Risks and open questions
 

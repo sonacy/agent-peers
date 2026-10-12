@@ -13,25 +13,11 @@
     "node": ">=22.13"
   },
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsup",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "build": "bun build src/bin.ts --compile --outfile dist/agent-peers"
   },
   "dependencies": {
     "@agent-peers/protocol": "workspace:*",
@@ -45,6 +31,7 @@
     "jsonc-parser": "^3.3.1"
   },
   "bin": {
-    "agent-peers": "./dist/bin.js"
-  }
+    "agent-peers": "./dist/agent-peers"
+  },
+  "private": false
 }

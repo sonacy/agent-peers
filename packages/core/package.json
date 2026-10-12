@@ -13,31 +13,13 @@
     "node": ">=22.13"
   },
   "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./dist/index.js"
-    }
+    ".": "./src/index.ts"
   },
-  "publishConfig": {
-    "exports": {
-      ".": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
-      }
-    }
-  },
-  "files": [
-    "dist"
-  ],
   "scripts": {
-    "build": "tsup",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@agent-peers/protocol": "workspace:*",
-    "ws": "^8.22.0"
+    "@agent-peers/protocol": "workspace:*"
   },
-  "devDependencies": {
-    "@types/ws": "^8.18.2"
-  }
+  "private": true
 }

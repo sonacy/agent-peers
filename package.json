@@ -2,27 +2,23 @@
   "name": "agent-peers-monorepo",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@10.34.6",
-  "engines": {
-    "node": ">=22.13"
-  },
+  "packageManager": "bun@1.3.10",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "pnpm -r run build",
-    "typecheck": "pnpm -r run typecheck",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
-    "test:live": "AGENT_PEERS_LIVE=1 vitest run --project live",
+    "build": "bun run --filter '*' build",
+    "typecheck": "bun run --filter '*' typecheck",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "test:live": "AGENT_PEERS_LIVE=1 bun test test/live",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "pnpm lint && pnpm typecheck && pnpm test"
+    "check": "bun run lint && bun run typecheck && bun test"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
-    "@types/node": "^24.0.0",
-    "@vitest/coverage-v8": "5.0.3",
-    "tsup": "8.5.1",
-    "typescript": "5.9.3",
-    "vitest": "5.0.3"
+    "@types/bun": "1.4.2",
+    "typescript": "5.9.3"
   }
 }

@@ -15,7 +15,7 @@ Related: [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4 (installer), §7 (hub reacha
 |---|---|
 | **Rooms** | All rooms with name, members online/total, open asks and last activity. **New room** takes a name, a description and the default invite role. |
 | **Room** | **Members:** handle, member, agent, model, workspace, connection, activity, tier, last seen. Rename and kick are available here. **Live log:** chat, asks with their state, replies, joins and renames. **Invites:** uses left, expiry, revoke. |
-| **Invite people** | Inputs: uses (default 10), expiry (default 7 d), role, language (`en`/`zh`), suggested handle. Outputs: the **join prompt** (copy button), the invite URL, and a one-line terminal command. |
+| **Invite people** | The room's single invite (PROTOCOL §10.1): **复制邀请** copies the join prompt; **换一个邀请码** and **关闭邀请** rotate or close it. Language (`en`/`zh`) follows the dashboard locale. See DASHBOARD.md §4.3. |
 
 **Who can open the dashboard**
 - **Self-hosted hub:** the operator, on the admin listener at `127.0.0.1:7338` (PROTOCOL §9).
@@ -34,9 +34,11 @@ Join my agent-peers room "payments-team" so our coding agents can ask each other
 1. Tell me the HOST in the URL inside the command below and the room name, and wait for my OK.
 2. Run this command with a long timeout (up to 10 minutes). It needs network access and writes to
    ~/.npm, ~/.agent-peers and your agent's config directory — if you run commands in a sandbox,
-   request unsandboxed/escalated execution for it. If `node -v` is missing or below 20, stop and tell me.
+   request unsandboxed/escalated execution for it.
 
-   npx -y @agent-peers/cli@0.2.0 join https://hub.example.com/j/7K3QX9TZ4M2BHC8D --here
+   curl -fsSL https://hub.example.com/install.sh | sh -s -- join https://hub.example.com/j/7K3QX9TZ4M2BHC8D --here
+
+   (If you prefer npm: npx -y @agent-peers/cli@0.3.0 join https://hub.example.com/j/7K3QX9TZ4M2BHC8D --here)
 
 3. Show me the output. Its last block, headed "[agent-peers] FINISH:", is the one step I must do —
    tell me exactly that.
@@ -97,7 +99,8 @@ Each step is **idempotent** and skipped when its result already exists. This mat
 ### Step 3 — Install
 
 - Installs the adapter into this agent if it isn't there already, using the same steps as `add` (ARCHITECTURE §4), non-interactively.
-- The bin shim records the absolute `process.execPath`, so the bridge never depends on the agent's PATH. GUI-launched apps on macOS get a minimal PATH, so this matters.
+- The single `agent-peers` binary is copied to `~/.agent-peers/bin/agent-peers-<version>`, and the plugin shims point at that **absolute path**. The bridge therefore never depends on the agent's PATH or on Node or Bun being installed. This matters because GUI-launched apps on macOS get a minimal PATH.
+- **`<hub>/install.sh`.** The hub serves a small script that detects OS and architecture, downloads the matching release binary **for the hub's own version** from GitHub Releases, verifies its SHA-256 against the checksums in the release, and runs it with the given arguments. This keeps hub and adapters on compatible versions and needs no package manager. The npm launcher remains as an alternative.
 - Finally, the CLI spawns the installed bridge once with `--selftest` and fails loudly if it can't start.
 
 ### Step 4 — Membership
