@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@agent-peers/protocol": "workspace:*"
+    "@agent-peers/protocol": "workspace:*",
+    "zod": "^4.6.6"
   },
   "private": true
 }

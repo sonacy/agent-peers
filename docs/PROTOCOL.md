@@ -11,7 +11,7 @@ The protocol is agent-neutral. Getting a message into a particular agent is adap
   - Bridge → hub: requests.
   - Hub → bridge: notifications (v0).
   - The hub processes each connection's requests in order.
-- **Limits.** Frames are at most 256 KiB and message `text` at most 64 KiB; larger payloads get the `payload_too_large` error. Times are Unix ms. IDs are ULIDs.
+- **Limits.** Frames are at most 256 KiB, message `text` at most 64 KiB and serialized `meta` at most 8 KiB; larger payloads get the `payload_too_large` error, as does a message whose encoded form would not fit one notification frame. Results that list messages (`msg.history`, `ask.get`) are cut to fit one frame, keeping the newest, and then carry `truncated: true`. Times are Unix ms. IDs are ULIDs.
 - **Fencing.** When a session is reattached by a new connection (§4), the hub detaches it from the old one. If the old socket is left with no sessions, the hub closes it.
 
 ## 2. Entities
@@ -98,6 +98,7 @@ bridge                                                      hub
   │── bye ─────────────────────────────────────────────────▶│
 ```
 
+- **Token refused.** With a missing, invalid or revoked member token the hub still accepts the upgrade (a WebSocket client can't read a refused upgrade's status), answers the first request with `unauthorized` and closes with code **4401**. Revoking a member's tokens closes their live sockets with 4401 too, and their sessions go offline at once. A bridge treats 4401 as fatal and stops reconnecting.
 - **`hello`** `{ protocol: ["agent-peers/0.3"], bridge: { agent_kind, agent_version, adapter, host } }` returns `welcome { protocol, heartbeat_ms: 15000, grace_ms: 90000, server_time, min_adapter }`.
   - If `adapter < min_adapter`, the hub still accepts the connection but marks every session on it `outdated`. Such sessions can't receive asks: new asks to them fail fast with `adapter_outdated`. The dashboard shows the upgrade notice (DASHBOARD §5).
   - If the protocol versions are incompatible, the hub returns `version_unsupported`, listing the versions it supports, and closes the socket.
@@ -107,6 +108,7 @@ bridge                                                      hub
   - **Idempotent.** Calling it again with the same `local_key` on the same connection returns the same result.
 - **`session.close`** `{ session_id }`: the session goes offline immediately. Its handles stay owned by the member.
 - **After reconnecting,** the bridge compares the sessions it reattached with its own set of live sessions. It closes any that ended while it was disconnected.
+- **The reattach result is authoritative.** A room the bridge remembers but `session.open` no longer lists was left while the bridge was offline (removed, kicked, exited, dissolved). The bridge drops it, including from auto-join, and never re-joins it on its own.
 
 ## 5. Presence
 
@@ -122,7 +124,8 @@ bridge                                                      hub
 
 - **Heartbeat.** The bridge sends `ping` after `heartbeat_ms` without having **sent** any frame; frames it receives don't reset this timer. The hub answers every `ping`.
 - **Dead connection.** If the bridge receives nothing for 2×`heartbeat_ms`, it considers the socket dead. It reconnects with backoff (1 s → 30 s, ±20 % jitter), then sends `hello` and `session.open` again for each live session.
-- **Unclean close.** The connection's sessions become `stale` at once. They become `offline` after `grace_ms`.
+- **Unclean close.** The connection's sessions become `stale` at once. They become `offline` after `grace_ms`, counted from the first stale transition.
+- **Hub restart.** Sessions that were attached when the hub stopped start as `stale` and get the same `grace_ms` to reattach before they go offline (§6.2 then requeues or fails their asks).
 - **No end signal.** Some adapters can't detect when a session ends; Cursor chats and Codex daemon threads may close silently. For those, the bridge closes a session after `idle_close_ms` (default 12 h) with no activity.
 
 ### 5.2 Activity (bridge-reported)
@@ -253,9 +256,9 @@ Session-scoped requests carry a `session_id` that belongs to the calling connect
 | `msg.progress` | `{ session_id, client_msg_id, ask_id, text }` | `{ id, seq }` |
 | `ask.claim` | `{ session_id, ask_id }` | `{ ask }`, or `ask_closed` / `ask_taken` |
 | `ask.cancel` | `{ session_id, ask_id }` | `{}` |
-| `ask.get` | `{ session_id, ask_id }` | `{ ask, messages }` |
+| `ask.get` | `{ session_id, ask_id }` | `{ ask, messages, truncated? }`: the question, then follow-ups; `truncated` when the oldest follow-ups were left out to fit one frame |
 | `msg.ack` | `{ session_id, room_id, seq }` | `{}` |
-| `msg.history` | `{ session_id, room_id, before_seq?, limit ≤ 200 }` | `{ messages }` |
+| `msg.history` | `{ session_id, room_id, before_seq?, limit ≤ 200 }` | `{ messages, truncated? }`: oldest first; `truncated` when older messages were left out to fit one frame (page on with `before_seq`) |
 | `bye` | `{}` | none; the hub closes the socket |
 
 - **Idempotency.** `client_msg_id` is a ULID generated by the bridge. The hub dedupes on (session identity, `client_msg_id`) for 10 minutes and returns the original `{id, seq}` on a repeat. After reconnecting, the bridge retries any unanswered sends with the same `client_msg_id`.
@@ -290,7 +293,7 @@ The card's `inject` field is the **current effective** tier. The bridge updates 
 
 ### 7.2 Envelope
 
-Every injection uses the same envelope, including replies and progress, and `peers_who` / `peers_inbox` tool output. Untrusted content is framed by a random per-injection nonce. Any body line that starts with `[agent-peers]` or `<<<` is prefixed with `> ` so it can't pass as a header or frame marker.
+Every injection uses the same envelope, including replies and progress, and `peers_who` / `peers_inbox` tool output. Untrusted content is framed by a random per-injection nonce. Any body line that starts with `[agent-peers]` or `<<<` is prefixed with `> ` so it can't pass as a header or frame marker. Leading whitespace and invisible format characters (zero-width, bidi marks) are ignored for this test, and vertical tab and form feed count as line breaks.
 
 ```
 [agent-peers] ASK from @home (member gulei · claude-code · claude-opus-5-5) in room "gulei-devices"
@@ -330,7 +333,7 @@ If a turn ends without a `peers_reply` for an ask it claimed:
   - `/j/<code>` itself only serves a human-readable landing page.
   - **One active invite per room.** It never expires and has no use limit, until the owner rotates or closes it (§10.1). Its role is always `member`; `readonly` grants are only given by the owner from the dashboard. Codes are shown masked as `inv_••••••••7H58`.
   - Redeem attempts are limited to 10 per minute per IP.
-- **Roles (per grant).** `owner` grants may also manage the invite, decide knocks, remove sessions, kick and restore members, and dissolve the room. `readonly` grants allow reading and `chat`, but not `ask`. `kick` revokes the member's grant for that room. The session receives `kicked`, the bridge removes the room from its auto-join list, and the next `room.join` gets `forbidden` until a new invite is redeemed.
+- **Roles (per grant).** `owner` grants may also manage the invite, decide knocks, remove sessions, kick and restore members, and dissolve the room. `readonly` grants allow reading and `chat`, but not `ask`. `kick` revokes the member's grant for that room. The session receives `kicked`, the bridge removes the room from its auto-join list, and the next `room.join` gets `forbidden` until a new invite is redeemed. A kick rotates the room's active invite, because the kicked member knows its code.
 - **Rate limits.** 30 messages per minute per member, plus the ask limits in §6.2.
 - **Not in v0.** End-to-end encryption, message signing, and linking several devices into one member.
 
@@ -401,7 +404,7 @@ A member searches discoverable rooms (`room.search`, or `/v0/rooms/search` on th
 | `room.leave` | the session itself | Releases this session's handle. |
 | `room.remove_session` | the session's member, or the owner | The same for another session. The target gets `room.removed { reason: removed }`. |
 | `room.exit` | a member | Revokes their own grant. All their sessions get `room.removed`. |
-| kick (`room.kick` / dashboard) | the owner | Revokes the grant, removes all of that member's sessions (`room.removed { reason: kicked }`), and adds them to the kicked list. |
+| kick (`room.kick` / dashboard) | the owner | Revokes the grant, removes all of that member's sessions (`room.removed { reason: kicked }`), adds them to the kicked list and rotates the active invite. |
 | restore | the owner | Re-grants `member` to a kicked member. |
 | `room.dissolve` | the owner | Removes everyone (`room.removed { reason: dissolved }`) and deletes the room's invite and pending knocks. Messages are kept until retention ends, so the asks feed can still show them. |
 

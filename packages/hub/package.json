@@ -21,7 +21,11 @@
   "dependencies": {
     "@agent-peers/protocol": "workspace:*",
     "hono": "^4.13.13",
-    "ulid": "^3.0.2"
+    "ulid": "^3.0.2",
+    "zod": "^4.6.6"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@agent-peers/core": "workspace:*"
+  }
 }
