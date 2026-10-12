@@ -24,5 +24,8 @@
     "@modelcontextprotocol/sdk": "^1.32.1",
     "zod": "^4.6.6"
   },
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@agent-peers/hub": "workspace:*"
+  }
 }

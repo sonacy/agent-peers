@@ -46,7 +46,10 @@ export function createSessions(
     const existing = repos.sessions.byIdentity(identity)
     const now = deps.now()
     if (existing) {
-      const merged = mergeCard(parseStoredCard(existing.card_json), card)
+      // Reattach/revive (§4): the stored title wins over the bridge's default, because titles only
+      // change through session.rename or the dashboard (§2.2), never by reconnecting.
+      const stored = parseStoredCard(existing.card_json)
+      const merged = mergeCard(stored, { ...card, title: stored.title ?? card.title })
       repos.sessions.reopen(existing.id, serializeCard(merged), ctx.outdated, now)
       return repos.sessions.byId(existing.id) as SessionRow
     }

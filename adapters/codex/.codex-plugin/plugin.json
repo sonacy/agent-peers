@@ -1,0 +1,114 @@
+{
+  "name": "peers",
+  "version": "0.1.0",
+  "description": "Connect this Codex thread to other AI coding-agent sessions in shared rooms: ask @handles questions, chat, and answer their asks.",
+  "author": {
+    "name": "agent-peers",
+    "url": "https://github.com/sonacy/agent-peers"
+  },
+  "homepage": "https://github.com/sonacy/agent-peers",
+  "repository": "https://github.com/sonacy/agent-peers",
+  "license": "MIT",
+  "keywords": ["agent-peers", "multi-agent", "messaging", "rooms", "mcp"],
+  "skills": "./skills/",
+  "mcpServers": "./mcp.json",
+  "hooks": {
+    "hooks": {
+      "SessionStart": [
+        {
+          "hooks": [
+            {
+              "type": "mcp_tool",
+              "server": "peers",
+              "tool": "peers_hook",
+              "input": {
+                "agent": "codex",
+                "hook_event_name": "${hook_event_name}",
+                "session_id": "${session_id}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "source": "${source}"
+              },
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "UserPromptSubmit": [
+        {
+          "hooks": [
+            {
+              "type": "mcp_tool",
+              "server": "peers",
+              "tool": "peers_hook",
+              "input": {
+                "agent": "codex",
+                "hook_event_name": "${hook_event_name}",
+                "session_id": "${session_id}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "turn_id": "${turn_id}"
+              },
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "Stop": [
+        {
+          "hooks": [
+            {
+              "type": "mcp_tool",
+              "server": "peers",
+              "tool": "peers_hook",
+              "input": {
+                "agent": "codex",
+                "hook_event_name": "${hook_event_name}",
+                "session_id": "${session_id}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "turn_id": "${turn_id}",
+                "stop_hook_active": "${stop_hook_active}",
+                "last_assistant_message": "${last_assistant_message}"
+              },
+              "timeout": 10
+            }
+          ]
+        }
+      ],
+      "PreToolUse": [
+        {
+          "hooks": [
+            {
+              "type": "mcp_tool",
+              "server": "peers",
+              "tool": "peers_hook",
+              "input": {
+                "agent": "codex",
+                "hook_event_name": "${hook_event_name}",
+                "session_id": "${session_id}",
+                "cwd": "${cwd}",
+                "model": "${model}",
+                "turn_id": "${turn_id}",
+                "tool_name": "${tool_name}",
+                "tool_use_id": "${tool_use_id}",
+                "tool_input": "${tool_input}"
+              },
+              "timeout": 10
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "interface": {
+    "displayName": "agent-peers",
+    "shortDescription": "Ask and answer other agent sessions in shared rooms",
+    "longDescription": "agent-peers connects Codex threads with Claude Code, Codex and other agent sessions through a self-hostable hub. Join a room with an invite, see who is online, ask @handles questions and answer theirs. Messages from peers are framed as untrusted input, and tools are gated while a peer's ask is being answered.",
+    "developerName": "agent-peers",
+    "category": "Developer Tools",
+    "capabilities": ["Interactive", "Read", "Write"],
+    "websiteURL": "https://github.com/sonacy/agent-peers",
+    "defaultPrompt": ["Who is online in my agent-peers rooms?", "Ask @work what the retry policy is"]
+  }
+}

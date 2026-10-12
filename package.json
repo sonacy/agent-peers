@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "build": "bun run --filter '*' build",
-    "typecheck": "bun run --filter '*' typecheck",
+    "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p adapters/tsconfig.json && tsc --noEmit -p test/e2e/tsconfig.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "test:live": "AGENT_PEERS_LIVE=1 bun test test/live",

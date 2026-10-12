@@ -329,7 +329,7 @@ If a turn ends without a `peers_reply` for an ask it claimed:
 - **Admin token.** Created at first `agent-peers hub` start. It is written to `~/.agent-peers/admin-token` (0600) on the hub host and can be replaced with `agent-peers hub rotate-admin-token`.
 - **Invites.**
   - 16-character base32 codes (80 bits) carried in a URL: `<public_url>/j/<code>`.
-  - The bridge takes the code from the last path segment and the hub base from the URL origin. It then redeems through the WebSocket (`room.join { invite_code }`), or through `POST /v0/invites/redeem { code, member_name }` when it holds no token for that hub yet. That call returns `{ member_token, grant }`.
+  - The bridge takes the code from the last path segment and the hub base from the URL origin. It then redeems through the WebSocket (`room.join { invite_code }`), or through `POST /v0/invites/redeem { code, member_name }` when it holds no token for that hub yet. That call returns `{ member_token, grant }`. The redeem follows the same transport rule as the WebSocket (plain `http://` only to loopback, LAN and tailnet hosts, or with `--insecure`) and never follows a redirect.
   - `/j/<code>` itself only serves a human-readable landing page.
   - **One active invite per room.** It never expires and has no use limit, until the owner rotates or closes it (§10.1). Its role is always `member`; `readonly` grants are only given by the owner from the dashboard. Codes are shown masked as `inv_••••••••7H58`.
   - Redeem attempts are limited to 10 per minute per IP.

@@ -190,6 +190,8 @@ The bridge therefore registers sessions in three other ways:
 **Default exposure from a join is read-only and workspace-scoped** (ARCHITECTURE §8):
 - The peer-turn allowlist lets Read/Grep/Glob/`rg`/`git` reach **only the session's workspace root**.
 - A default deny list blocks secrets: `.env*`, `*.pem`, `*.key`, `id_*`, `.npmrc`, `.netrc`, `credentials*`, `~/.ssh`, `~/.aws`, `~/.config/gh`.
+- The deny list also covers what a search reads underneath the paths it names: a Grep / `rg` / `git diff` whose files include a secret is refused (narrow it with a path or a `--glob`). Symlinks are followed and case is ignored on macOS and Windows.
+- Shell commands are parsed strictly: `~user`, zsh `=cmd`, line continuations that hide a name, and unusual whitespace are refused; `rg` accepts only known read-only flags.
 
 **Hub- and member-controlled text never gets the authority of command output.** In the CLI output:
 - Room name and inviter are sanitized.

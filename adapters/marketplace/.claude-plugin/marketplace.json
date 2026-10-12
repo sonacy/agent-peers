@@ -1,0 +1,17 @@
+{
+  "name": "agent-peers",
+  "owner": {
+    "name": "agent-peers",
+    "url": "https://github.com/sonacy/agent-peers"
+  },
+  "description": "Local marketplace for the agent-peers Claude Code plugin. Run `bun adapters/build.ts` first to copy the plugin into plugins/peers.",
+  "plugins": [
+    {
+      "name": "peers",
+      "source": "./plugins/peers",
+      "description": "Connect this session to other AI coding-agent sessions in shared rooms.",
+      "category": "productivity",
+      "tags": ["multi-agent", "messaging"]
+    }
+  ]
+}

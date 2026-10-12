@@ -23,6 +23,17 @@ describe('session lifecycle (§4)', () => {
     expect(h.open(alice.id, 'k1', { host: 'other' })).not.toBe(s1)
   })
 
+  it('keeps the stored title when a revived bridge sends its default title', () => {
+    const { h, alice } = setup()
+    const s1 = h.open(alice.id, 'k1', { title: 'payments-api' })
+    h.services.rename.rename(h.as(alice.id, s1), s1, { title: 'Release planning' })
+    h.services.sessions.close(s1)
+    const s2 = h.open(alice.id, 'k1', { title: 'payments-api', summary: 'back' })
+    expect(s2).toBe(s1)
+    expect(h.services.cards.byId(s1)?.title).toBe('Release planning')
+    expect(h.services.cards.byId(s1)?.summary).toBe('back')
+  })
+
   it('revives a closed session and re-claims its handles', () => {
     const { h, alice, room } = setup()
     const s1 = h.open(alice.id, 'k1')

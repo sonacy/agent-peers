@@ -1,0 +1,7 @@
+{
+  "session_id": "def456",
+  "transcript_path": "/Users/example/.claude/projects/example/1c0d2f3e-0000-4000-8000-000000000001.jsonl",
+  "cwd": "/Users/example/project",
+  "hook_event_name": "SessionStart",
+  "source": "clear"
+}

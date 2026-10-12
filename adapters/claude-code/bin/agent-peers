@@ -1,0 +1,27 @@
+#!/bin/sh
+# agent-peers plugin shim (ARCHITECTURE §5, §6.2). Plugin manifests and hooks point here; it execs the
+# installed single-file binary so the agent's PATH and Node/Bun installs never matter.
+#
+#   AGENT_PEERS_BIN    explicit binary path (wins)
+#   AGENT_PEERS_HOME   state dir, default $HOME/.agent-peers; binary at $AGENT_PEERS_HOME/bin/current
+#
+# It must `exec` (not spawn) so hook-to-bridge discovery by ancestor PID keeps working.
+
+if [ "${1:-}" = "hook" ] && [ -n "${CURSOR_VERSION:-}" ]; then
+  # Cursor imports Claude Code plugins and runs their hooks. agent-peers ships its own Cursor
+  # adapter, so every hook here is a no-op under Cursor: valid empty JSON, exit 0.
+  printf '{}\n'
+  exit 0
+fi
+
+home="${AGENT_PEERS_HOME:-${HOME:-}/.agent-peers}"
+bin="${AGENT_PEERS_BIN:-$home/bin/current}"
+
+if [ ! -x "$bin" ]; then
+  echo "agent-peers: binary not found or not executable: $bin" >&2
+  echo "agent-peers: install it with: npx @agent-peers/cli add" >&2
+  # Exit 1, never 2: for Claude Code hooks, 2 would block the prompt or the stop.
+  exit 1
+fi
+
+exec "$bin" "$@"

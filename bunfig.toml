@@ -4,4 +4,4 @@ exact = false
 [test]
 coverageSkipTestFiles = true
 coverageThreshold = { lines = 0.8, functions = 0.8 }
-coveragePathIgnorePatterns = ["packages/dashboard/**", "packages/cli/src/bin.ts", "test/**"]
+coveragePathIgnorePatterns = ["packages/dashboard/**", "packages/cli/src/bin.ts", "test/**", "packages/*/test/**"]

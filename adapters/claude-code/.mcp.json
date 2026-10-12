@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "peers": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+      "args": ["mcp", "--surface", "claude-code"]
+    }
+  }
+}

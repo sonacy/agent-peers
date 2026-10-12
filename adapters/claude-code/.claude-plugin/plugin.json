@@ -1,0 +1,14 @@
+{
+  "name": "peers",
+  "displayName": "agent-peers",
+  "version": "0.1.0",
+  "description": "Connect this session to other AI coding-agent sessions in shared rooms: ask @handles questions, chat, and answer their asks.",
+  "author": {
+    "name": "agent-peers",
+    "url": "https://github.com/sonacy/agent-peers"
+  },
+  "homepage": "https://github.com/sonacy/agent-peers",
+  "repository": "https://github.com/sonacy/agent-peers",
+  "license": "MIT",
+  "keywords": ["agent-peers", "multi-agent", "messaging", "rooms", "mcp"]
+}

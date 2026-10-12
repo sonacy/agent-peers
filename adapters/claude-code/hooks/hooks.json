@@ -1,0 +1,126 @@
+{
+  "description": "agent-peers: register sessions, deliver peer messages (asyncRewake waiter, prompt and stop fallbacks), report activity, nudge unanswered asks, auto-approve peers_reply/peers_progress and gate tools during peer turns.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "session-start", "--agent", "claude-code"],
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "wait", "--agent", "claude-code"],
+            "timeout": 86400,
+            "async": true,
+            "asyncRewake": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "user-prompt-submit", "--agent", "claude-code"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "stop", "--agent", "claude-code"],
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "wait", "--agent", "claude-code"],
+            "timeout": 86400,
+            "async": true,
+            "asyncRewake": true
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "stop-failure", "--agent", "claude-code"],
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "wait", "--agent", "claude-code"],
+            "timeout": 86400,
+            "async": true,
+            "asyncRewake": true
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "notification", "--agent", "claude-code"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "^mcp__plugin_peers_peers__peers_(reply|progress)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "permission-request", "--agent", "claude-code"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "pre-tool-use", "--agent", "claude-code"],
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/bin/agent-peers",
+            "args": ["hook", "session-end", "--agent", "claude-code"]
+          }
+        ]
+      }
+    ]
+  }
+}

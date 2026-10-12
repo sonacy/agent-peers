@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "peers": {
+      "command": "./bin/agent-peers",
+      "args": ["mcp", "--surface", "codex"],
+      "startup_timeout_sec": 20,
+      "tool_timeout_sec": 120
+    }
+  }
+}

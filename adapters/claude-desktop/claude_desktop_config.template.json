@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "agent-peers-desktop": {
+      "command": "/ABSOLUTE/PATH/TO/.agent-peers/bin/current",
+      "args": ["mcp", "--surface", "claude-desktop"]
+    }
+  }
+}

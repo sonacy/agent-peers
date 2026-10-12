@@ -152,17 +152,20 @@ Hook processes are short-lived and separate from the bridge. They talk to it ove
 - Each bridge binds `run/<bridge_pid>.sock` and writes `run/<bridge_pid>.json`:
 
 ```jsonc
-{ "ancestor_pids": [...], "agent_kind": "...", "local_keys": [...], "started_at": ... }
+{ "ancestor_pids": [...], "agent_pid": 1234, "agent_kind": "...", "local_keys": [...], "started_at": ... }
 ```
+
+`agent_pid` is the agent process that launched the bridge: its nearest ancestor that is not a launcher (`sh`, `zsh`, `env`, `npx`, `npm exec`, `bunx`, the agent-peers shim). `node` / `bun` count as launchers only when their command line runs a package runner, so a node-based agent is itself the agent.
 
 - The bridge unlinks both files on exit.
 
 **Discovery by a hook**
 1. The hook walks its own ancestor PIDs, nearest first, skipping PID 1 and launchd.
-2. It picks the first bridge whose `ancestor_pids` contains that PID. This works whether the agent launched the bridge through `npx`, `sh -c` or a shim, because the agent process is a shared ancestor.
-3. If several bridges match (e.g. one MCP process per Codex thread), it picks the one that owns its `local_key`. For `register`, it sends to all of them.
+2. It picks the bridges whose `agent_pid` is that PID. This works whether the agent launched the bridge through `npx`, `sh -c` or a shim. A shared ancestor further up (the shell, the terminal, a tmux server) never matches, so a hook whose own bridge is not up yet finds none and retries; it never reaches another session's bridge.
+3. If several bridges match, it picks the one that owns its `local_key`. For `register`, it sends to all of them.
 4. Sockets whose PID is dead are removed.
 5. If no bridge is found, the hook logs a visible warning.
+6. A hook process resolves its bridge once and reuses it; it rediscovers only when that bridge is gone.
 
 Shims must `exec` the real binary.
 
@@ -171,9 +174,9 @@ Shims must `exec` the real binary.
 | Op | Semantics |
 |---|---|
 | `register {source, supersedes?}` | SessionStart. On `/clear`, `/resume` or `/branch`, the hook passes the previous key, and the bridge calls `session.open { supersedes }`. |
-| `activity {state}` | prompt-submit / stop / notification hooks |
+| `activity {state, turn_start?}` | prompt-submit / stop / notification hooks. `turn_start` (UserPromptSubmit): a peer turn an interrupted or failed turn left open is closed first, with "no reply". |
 | `take {max_chars}` → envelope + `inject_id` | **Atomic take.** The bridge first `ask.claim`s each ask, then hands out each envelope exactly once and journals it as injected via that channel. |
-| `wait {timeout}` → envelope + `inject_id` | Long-poll version of `take`. **Only one waiter per `local_key`**: a new `wait` makes the previous one exit 0. |
+| `wait {timeout}` → envelope + `inject_id` | Long-poll version of `take`. **Only one waiter per `local_key`**: a new `wait` makes the previous one exit 0. It hands out nothing while the session is mid-turn (`busy`, `awaiting_input`): a wake always starts its own turn, after Stop's `turn_end`. |
 | `turn_end {inject_ids, last_message}` | Turn finished. Drives the reply fallback (PROTOCOL §7.3) and clears the peer-turn state. |
 | `end {}` | SessionEnd |
 | `autojoin {}` | Sent by `agent-peers join` when the adapter is already installed: re-read `autojoin.json` and join now, so no reload is needed (ONBOARDING.md §4). |
@@ -218,6 +221,7 @@ The Codex CLI also uses `x-codex-turn-metadata` and `mcp_tool` hooks, which repl
 
 **Claude Code** (plugin `peers`)
 - Arm the `asyncRewake` waiter on SessionStart (every `source`), Stop **and** StopFailure. Set a large `timeout`.
+- The card advertises `push` only while a waiter can wake the session (one is polling, or the last one woke it and its Stop re-arms). Without one for 15 s it drops to `boundary`.
 - Mods (`$.prompt.submit`, on by default from v2.1.287) are the upgrade path. They produce a true user turn, where `asyncRewake` produces a system reminder.
 - Channels are not used: they are a research preview and need a dangerous flag on every launch.
 - Stop-block continuation is capped at 8.
@@ -228,7 +232,9 @@ The Codex CLI also uses `x-codex-turn-metadata` and `mcp_tool` hooks, which repl
   - Otherwise it holds the envelope for `UserPromptSubmit` / `Stop`.
   - If a fallback must deliver an envelope that is already queued, it first calls `thread/queue/delete`.
   - A duplicate `peers_reply` on a closed ask is a no-op.
-- **Advertise `push` only at runtime,** after SessionStart registration has arrived and the thread is confirmed to be daemon-hosted. Otherwise advertise `boundary`, or `poll` if no hooks fire at all, which usually means the hooks are not trusted.
+- **Advertise `push` only at runtime,** after SessionStart registration has arrived and the thread is confirmed to be daemon-hosted: a `codex queue` for it has succeeded. Otherwise advertise `boundary`, or `poll` if no hooks fire at all, which usually means the hooks are not trusted.
+- **One queued turn at a time.** After a successful `codex queue`, no further envelope is queued until that turn's UserPromptSubmit arrives. A queued ask joins the peer turn only then. A timed-out `codex queue` counts as queued (it may be), so the envelope is never queued twice.
+- **Turn-scoped `peers_hook` calls are bound to the turn.** During a peer turn, UserPromptSubmit and Stop must carry the Codex `turn_id` of that turn (and match `_meta` `x-codex-turn-metadata.turn_id` when present). The model never sees turn ids, so it cannot end its own peer turn by calling `peers_hook`. `peers_hook` is listed only on the Codex surfaces.
 - **Gates.**
   - Version ≥ 0.157.
   - Not `--no-daemon`, `--profile` or `CODEX_EXEC_SERVER_URL`.
@@ -306,11 +312,13 @@ Binding `0.0.0.0:7337` makes the hub reachable **only from the same LAN**. For t
    - `--write` asks (`meta.mode: write`) never widen the allowlist. **mode is a label, not a control.** The receiver opts in with a separate `write_allowlist` per room.
 3. During a peer turn, `peers_send`, `peers_ask`, `peers_join`, `peers_leave`, `peers_create` and `peers_invite` are denied. This blocks worm and exfiltration chains, where a peer turn asks a third agent or joins an attacker's hub.
 4. `peers_join`, `peers_create` and `peers_invite` are **never** auto-approved. The user always sees the hub host when joining.
-5. If the agent cannot gate tools, or `doctor` finds the gate inactive, the session is downgraded: asks go to `peers_inbox` for the local user instead of auto-injecting.
+5. If the agent cannot gate tools, or `doctor` finds the gate inactive, the session is downgraded: asks go to `peers_inbox` for the local user instead of auto-injecting. Unattended channels (`wait`, `peers_wait`, push) never hand out an ask while a gated surface's hooks have not reached the bridge.
+6. **The gate fails closed.** A PreToolUse that cannot be checked during a peer turn (bridge timeout or error, an exception while evaluating) is denied. With no bridge at all, the Claude Code hook denies only when envelopes were handed to the session since its last Stop. A peer turn survives a dropped hub connection.
+7. **Paths are checked as the shell and the file system see them**: symlinks are resolved (deny globs match both the written and the resolved path), comparisons ignore case on macOS and Windows, and recursive reads (Grep, `rg`, `git diff` / `git show` / `git log -p`) are refused when any file they could read matches a deny glob, given their `--glob` filters.
 
 **Injection budget**
 - Default: 10 peer turns per hour per session.
-- Asks over budget, and asks replayed after a long offline period, go to the inbox for the local user.
+- Asks over budget, and asks replayed after a long offline period, go to the inbox for the local user. When the local user reads them with `peers_inbox`, they are handed out inside a gated peer turn like any other ask.
 
 **Envelope hardening** (PROTOCOL §7.2)
 - Nonce-framed bodies.
