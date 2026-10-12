@@ -1,7 +1,7 @@
 {
-  "name": "@agent-peers/cli",
+  "name": "@agent-peers/cli-app",
   "version": "0.1.0",
-  "description": "agent-peers CLI: installer, join, hub, invite, shell commands",
+  "description": "agent-peers CLI source: compiled into the agent-peers binary (published via the @agent-peers/cli launcher, see npm/)",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -17,7 +17,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "build": "bun build src/bin.ts --compile --outfile dist/agent-peers"
+    "embed": "bun scripts/embed-adapters.ts",
+    "build": "bun scripts/release.ts --current --outfile dist/agent-peers"
   },
   "dependencies": {
     "@agent-peers/protocol": "workspace:*",
@@ -33,5 +34,5 @@
   "bin": {
     "agent-peers": "./dist/agent-peers"
   },
-  "private": false
+  "private": true
 }

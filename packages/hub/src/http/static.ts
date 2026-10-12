@@ -110,3 +110,26 @@ export async function serveSpa(
   const index = await find(source, INDEX)
   return index === undefined ? placeholder(title) : assetResponse(index, INDEX)
 }
+
+/** The SPA's `index.html` from `source`, or undefined when no dashboard is bundled. */
+export async function serveSpaIndex(source: StaticSource | undefined): Promise<Response | undefined> {
+  if (source === undefined) return undefined
+  const index = await find(source, INDEX)
+  return index === undefined ? undefined : assetResponse(index, INDEX)
+}
+
+/**
+ * One bundled file below `mount`, with no `index.html` fallback. The admin listener uses it for the
+ * dashboard bundle's `/app/` files (its `publicPath`), which the operator page at `/admin` loads.
+ */
+export async function serveBundleFile(
+  source: StaticSource | undefined,
+  mount: string,
+  pathname: string,
+): Promise<Response> {
+  const path = relativeAssetPath(pathname, mount)
+  const notFound = new Response('not found', { status: 404 })
+  if (source === undefined || path === undefined || path === '' || extname(path) === '.html') return notFound
+  const asset = await find(source, path)
+  return asset === undefined ? notFound : assetResponse(asset, path)
+}

@@ -53,7 +53,7 @@ It works across agent products. Wire protocol: [`PROTOCOL.md`](./PROTOCOL.md). P
 
 **A bridge serves N sessions.** One agent process can host several conversations, as with Cursor chats in a window, OpenCode server sessions, and possibly Codex threads in the app-server daemon. So one hub connection multiplexes sessions. Whether Codex runs one MCP process per thread or one per daemon is unverified, so the design allows **several bridges under one agent process** as well (§5).
 
-**No machine-level daemon in v0.** Installing means installing a plugin, with no launchd or systemd unit.
+**No machine-level daemon in v0.** Installing means installing a plugin, with no launchd or systemd unit. (Only a hub host may opt in: `agent-peers hub service install` runs the hub as a per-user launchd agent or systemd user unit.)
 
 ## 3. In-agent UX
 
@@ -114,13 +114,19 @@ The installer is modelled on `vercel-labs/plugins` (Apache-2.0), which installs 
 
 | Agent | Install | Post-install step the installer prints |
 |---|---|---|
-| Claude Code | `claude plugin marketplace add <owner>/agent-peers` → `claude plugin install peers@agent-peers --scope user`. Fallback: copy into `~/.claude/skills/peers/` (loads as `peers@skills-dir`). | `/reload-plugins --force` or restart. The skills-dir fallback loads only in new sessions. |
-| Codex CLI | `codex plugin marketplace add <owner>/agent-peers` → `codex plugin add peers@agent-peers` | **Open `/hooks` and trust `peers`.** Re-trust after each upgrade (trust is per hook hash). `doctor` checks this. |
+| Claude Code | `claude plugin marketplace add <home>/plugins/<v>/claude-marketplace` → `claude plugin install peers@agent-peers --scope user`. On 2.1.292+ this is a single step with `--marketplace`. If the CLI is missing or fails, copy into `~/.claude/skills/peers/` (loads as `peers@skills-dir`), but only into a folder agent-peers created itself. | `/reload-plugins --force` or restart. The skills-dir fallback loads only in new sessions. |
+| Codex CLI | `codex plugin marketplace add <home>/plugins/<v>/codex-marketplace` → `codex plugin add peers@agent-peers`. Then add `approval_mode = "approve"` for `peers_reply` and `peers_progress` to `$CODEX_HOME/config.toml`. The edit is textual so user comments survive, and the file is backed up first. | **Open `/hooks` and trust `peers`.** Re-trust after each upgrade (trust is per hook hash). `doctor` checks this. |
 | Cursor IDE | Copy into `~/.cursor/plugins/local/agent-peers/` (a real dir, not a symlink). Fallback: merge `~/.cursor/{mcp,hooks}.json` and `commands/`. | Reload Window |
 | pi | `pi install npm:@agent-peers/pi@<ver>` | restart pi |
 | OpenCode | `opencode plugin @agent-peers/opencode -g` **and** write `~/.config/opencode/commands/peers/*.md` (npm plugins can't ship commands) | restart |
-| Claude Desktop | Back up `~/Library/Application Support/Claude/claude_desktop_config.json`, then merge in `mcpServers["agent-peers-desktop"] = {command: <abs node>, args: [<runtime>/bridge.js, "--surface", "claude-desktop"]}`. The distinct name matters: this config also loads into the Desktop Code tab, where the bridge sees `clientInfo` from Claude Code and no-ops. | Quit and reopen Claude. Set the peers tools to "Always allow". |
+| Claude Desktop | Back up `~/Library/Application Support/Claude/claude_desktop_config.json`, then merge in `mcpServers["agent-peers-desktop"] = {command: "<home>/bin/current", args: ["mcp", "--surface", "claude-desktop"]}`. Every other key is kept, and a file that isn't valid JSON is never touched. The distinct name matters: this config also loads into the Desktop Code tab, where the bridge sees `clientInfo` from Claude Code and no-ops. | Quit and reopen Claude. Set the peers tools to "Always allow". |
 | Codex desktop | Same as the Codex CLI, but using the bundled engine `/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex` (or `CODEX_CLI_PATH`). | Open a new chat, then **Review hooks** and trust `peers`. |
+
+**Where things live (`<home>` = `AGENT_PEERS_HOME`, default `~/.agent-peers`)**
+- **The binary** is copied to `<home>/bin/agent-peers-<v>`, and `<home>/bin/current` points to it. Plugin shims default to the versioned path; `AGENT_PEERS_BIN` overrides it.
+- **Plugin trees** are built into the binary and written out under `<home>/plugins/<v>/` as two local marketplaces, one for Claude and one for Codex. Installs never depend on GitHub or npm.
+- **`<home>/installs.json`** records what was installed where, which `remove` and `doctor` use. `remove` keeps the shared Codex plugin while the other Codex surface still uses it.
+- **Test overrides:** `AGENT_PEERS_BINARY` (the binary to install) and `AGENT_PEERS_APP_DIRS` (where to look for app bundles).
 
 **One-step path:** a join prompt runs `agent-peers join <invite> --here`. It installs into the current agent only, then joins and says hello. See [`ONBOARDING.md`](./ONBOARDING.md).
 

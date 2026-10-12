@@ -7,14 +7,18 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter '*' build",
-    "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p adapters/tsconfig.json && tsc --noEmit -p test/e2e/tsconfig.json",
+    "build": "bun run --filter @agent-peers/dashboard build && bun run --filter @agent-peers/cli-app build",
+    "typecheck": "bun run --filter '*' typecheck && tsc --noEmit -p adapters/tsconfig.json && tsc --noEmit -p test/e2e/tsconfig.json && tsc --noEmit -p test/release/tsconfig.json",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
     "test:live": "AGENT_PEERS_LIVE=1 bun test test/live",
+    "test:dashboard-e2e": "tsc --noEmit -p test/dashboard-e2e/tsconfig.json && packages/dashboard/node_modules/.bin/playwright test -c test/dashboard-e2e/playwright.config.ts",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "bun run lint && bun run typecheck && bun test"
+    "check": "bun run lint && bun run typecheck && bun test",
+    "release:build": "bun packages/cli/scripts/release.ts",
+    "release:npm": "bun packages/cli/scripts/npm-stage.ts",
+    "release:install-sh": "bun packages/cli/scripts/install-sh.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

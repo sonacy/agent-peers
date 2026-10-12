@@ -18,7 +18,7 @@ import {
   originGuard,
   securityHeaders,
 } from './security'
-import { serveSpa } from './static'
+import { serveBundleFile, serveSpa } from './static'
 import type { AppEnv, HttpContext } from './types'
 
 const MEMBER_API = /^\/v0\/me(\/|$)|^\/v0\/rooms\/search$/
@@ -69,9 +69,10 @@ export function createAdminApp(ctx: HttpContext): Hono<AppEnv> {
   mountAdminWrites(app, ctx)
   app.get('/', (c) => c.redirect('/admin/', 302))
   app.get('/admin', (c) => c.redirect('/admin/', 301))
-  app.get('/admin/*', (c) =>
-    serveSpa(ctx.options.admin ?? ctx.options.dashboard, '/admin', c.req.path, 'Peers operator'),
-  )
+  const operatorSource = () => ctx.options.admin ?? ctx.options.dashboard
+  app.get('/admin/*', (c) => serveSpa(operatorSource(), '/admin', c.req.path, 'Peers operator'))
+  // The bundle references its scripts, styles and fonts under `/app/` (its publicPath).
+  app.get('/app/*', (c) => serveBundleFile(operatorSource(), '/app', c.req.path))
   app.get(PAGE_CSS_PATH, (c) => c.body(PAGE_CSS, 200, { 'content-type': 'text/css; charset=utf-8' }))
   return app
 }

@@ -1,0 +1,52 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`claude-code installer uses the two-step flow before 2.1.292 and drops a marketplace from an older version 1`] = `
+[
+  "$ <TMP>/bin/claude plugin marketplace add <TMP>/home/.agent-peers/plugins/0.1.0/marketplace",
+  "$ <TMP>/bin/claude plugin install peers@agent-peers --scope user --json",
+  "if that fails: copy the plugin to <TMP>/home/.claude/skills/peers",
+]
+`;
+
+exports[`codex installers adds the marketplace and plugin, then pre-approves the reply tools with a backup 1`] = `
+[
+  "$ <TMP>/bin/codex plugin marketplace add <TMP>/home/.agent-peers/plugins/0.1.0/codex-marketplace --json -> ok",
+  "$ <TMP>/bin/codex plugin add peers@agent-peers --json -> ok",
+  "updated <TMP>/home/.codex/config.toml (reply tools approval)",
+  "backup <TMP>/home/.codex/config.toml.agent-peers-20251009T085320Z.bak",
+]
+`;
+
+exports[`codex installers adds the marketplace and plugin, then pre-approves the reply tools with a backup 2`] = `
+"# mine
+model = "gpt-6"
+[plugins."peers@agent-peers"]
+enabled = true
+
+# agent-peers: auto-approve the peers reply tools (\`agent-peers remove\` deletes this block)
+[plugins."peers@agent-peers".mcp_servers.peers.tools.peers_reply]
+approval_mode = "approve"
+
+[plugins."peers@agent-peers".mcp_servers.peers.tools.peers_progress]
+approval_mode = "approve"
+"
+`;
+
+exports[`claude-desktop installer merges its server, keeps every other key, backs up, and is idempotent 1`] = `
+"{
+  "preferences": {
+    "theme": "dark"
+  },
+  "mcpServers": {
+    "other": {
+      "command": "/bin/other",
+      "args": []
+    },
+    "agent-peers-desktop": {
+      "command": "<TMP>/home/.agent-peers/bin/current",
+      "args": ["mcp", "--surface", "claude-desktop"]
+    }
+  }
+}
+"
+`;

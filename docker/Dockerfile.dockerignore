@@ -1,0 +1,11 @@
+# BuildKit reads <Dockerfile>.dockerignore for `docker build -f docker/Dockerfile .`
+**/node_modules
+**/dist
+**/coverage
+.git
+.github
+*.log
+.env
+.env.*
+**/.DS_Store
+test/live

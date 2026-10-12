@@ -1,0 +1,228 @@
+# Release on a version tag (docs/RELEASING.md):
+#   1. build      cross-compile every target on Linux, write SHA256SUMS, render install.sh
+#   2. smoke      run each binary natively (--version, mcp --selftest)
+#   3. image      build the hub image (linux/amd64) and run it: the hub starts, the admin CLI works
+#   4. github     create the GitHub Release with binaries, SHA256SUMS and install.sh (+ attestations)
+#   5. npm        publish @agent-peers/cli-<platform>-<arch> then the @agent-peers/cli launcher
+#   6. docker     build and push ghcr.io/<owner>/agent-peers-hub (linux/amd64, linux/arm64)
+# Nothing is published until build, smoke and image pass. Every action is pinned to a commit SHA.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      - run: bun install --frozen-lockfile
+      - name: Check the tag matches packages/cli/package.json
+        id: version
+        run: |
+          version="$(jq -r .version packages/cli/package.json)"
+          if [ "v${version}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match packages/cli version ${version}"
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          case "$version" in *-*) echo "prerelease=true" ;; *) echo "prerelease=false" ;; esac >> "$GITHUB_OUTPUT"
+      - name: Check every package, plugin manifest and ADAPTER_VERSION match the tag
+        run: bun packages/cli/scripts/check-versions.ts --expect "$GITHUB_REF_NAME"
+      - run: bun run check
+      - name: Build every target
+        run: bun packages/cli/scripts/release.ts --adapters check
+      - name: Check install.sh is in sync with the hub template
+        run: bun packages/cli/scripts/install-sh.ts --check
+      - run: cp scripts/install.sh dist/release/install.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release
+          path: dist/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  smoke:
+    needs: build
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { runner: ubuntu-latest, asset: agent-peers-linux-x64 }
+          - { runner: ubuntu-24.04-arm, asset: agent-peers-linux-arm64 }
+          - { runner: macos-latest, asset: agent-peers-darwin-arm64 }
+          - { runner: windows-latest, asset: agent-peers-windows-x64.exe, experimental: true }
+          # darwin-x64 is cross-compiled and not run: hosted Intel macOS runners are being retired.
+    runs-on: ${{ matrix.runner }}
+    # Windows is a build target but not yet a tested platform: report, don't block the release.
+    continue-on-error: ${{ matrix.experimental == true }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: release
+      - name: Verify checksum
+        shell: bash
+        working-directory: release
+        run: grep " ${{ matrix.asset }}\$" SHA256SUMS | (sha256sum -c - 2>/dev/null || shasum -a 256 -c -)
+      - name: Run the binary
+        shell: bash
+        env:
+          AGENT_PEERS_HOME: ${{ runner.temp }}/agent-peers-home
+        run: |
+          bin="release/${{ matrix.asset }}"
+          chmod +x "$bin"
+          "$bin" --version
+          "$bin" version
+          "$bin" mcp --surface claude-code --selftest
+
+  image:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Build the hub image (linux/amd64)
+        run: docker build --platform linux/amd64 -f docker/Dockerfile -t agent-peers-hub:ci .
+      - name: Run it, wait for the hub, use the admin CLI inside it
+        run: |
+          docker run -d --name agent-peers-hub -p 127.0.0.1:7337:7337 agent-peers-hub:ci \
+            --public-url http://127.0.0.1:7337
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1:7337/install.sh; then break; fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null http://127.0.0.1:7337/install.sh
+          docker exec agent-peers-hub agent-peers rooms
+          docker exec agent-peers-hub agent-peers invite payments --create
+      - name: Hub logs
+        if: always()
+        run: docker logs agent-peers-hub || true
+
+  github:
+    needs: [build, smoke, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: dist/release
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: dist/release/agent-peers-*
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          flags="--verify-tag --generate-notes --title ${GITHUB_REF_NAME}"
+          if [ "$PRERELEASE" = "true" ]; then flags="$flags --prerelease"; fi
+          # shellcheck disable=SC2086
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" $flags dist/release/*
+
+  npm:
+    needs: [build, smoke, image, github]
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      # npm trusted publishing (OIDC) and provenance.
+      id-token: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: npm >= 11.5.1 (trusted publishing)
+        run: npm install -g npm@11.6.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: release
+          path: dist/release
+      - name: Stage the packages
+        run: bun packages/cli/scripts/npm-stage.ts --version "$GITHUB_REF_NAME"
+      - name: Publish (platform packages first, then the launcher)
+        env:
+          # Empty once trusted publishing is configured; the first publish uses this token.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+          # Provenance needs a public repository.
+          NPM_CONFIG_PROVENANCE: ${{ github.event.repository.private == false }}
+        run: |
+          tag=latest
+          if [ "$PRERELEASE" = "true" ]; then tag=next; fi
+          for dir in dist/npm/cli-* dist/npm/cli; do
+            name="$(jq -r .name "$dir/package.json")"
+            if npm view "${name}@${VERSION}" version >/dev/null 2>&1; then
+              echo "${name}@${VERSION} is already published; skipping"
+              continue
+            fi
+            npm publish "$dir" --access public --tag "$tag"
+          done
+
+  docker:
+    needs: [build, smoke, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/agent-peers-hub
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          flavor: |
+            latest=${{ needs.build.outputs.prerelease == 'false' }}
+          labels: |
+            org.opencontainers.image.title=agent-peers-hub
+            org.opencontainers.image.description=agent-peers hub (WebSocket relay, rooms, dashboard)
+      - id: push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/agent-peers-hub
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true

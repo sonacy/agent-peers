@@ -94,7 +94,7 @@ Each step is **idempotent** and skipped when its result already exists. This mat
 | pi | `PI_SESSION_ID` |
 | others | none; use `bootstrap-<ulid>` |
 
-**Sandbox.** If `CODEX_SANDBOX` is set, or a write to `~/.agent-peers` or the hub connection fails with `EPERM`, `EACCES` or `ENOTFOUND`, the CLI stops before redeeming and exits with code 3. It prints `blocked by your agent's sandbox`, the exact command to rerun with escalation, and the equivalent terminal command (`--session-key <key>`).
+**Sandbox.** If `CODEX_SANDBOX` is set, or a write to `~/.agent-peers` or the hub connection fails with `EPERM`, `EACCES` or `ENOTFOUND`, the CLI stops before redeeming and exits with code 3. It prints `blocked by your agent's sandbox`, the exact command to rerun with escalation, and the equivalent terminal command (`cd '<workspace>' && … --session-key <key>`). A hub served over plain http can't vouch for its own install script, so for such hubs both commands use the GitHub release installer instead of `<hub>/install.sh`.
 
 ### Step 3 — Install
 

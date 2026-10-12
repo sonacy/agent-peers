@@ -50,6 +50,11 @@ export interface HubConfigInput {
   /** Secret that derives invite codes; generated (and persisted in `dataDir`) when absent. */
   readonly inviteSecret?: string
   readonly clock?: Clock
+  /**
+   * Row id generator (ULIDs, monotonic in creation order). Tests and the seeded demo pass a
+   * deterministic one so ids (and the colors hashed from them) repeat run to run.
+   */
+  readonly newId?: () => string
   readonly logger?: Logger
 }
 
@@ -72,6 +77,7 @@ export interface HubConfig {
   readonly bootstrapDefaultRoom: boolean
   readonly inviteSecret: string | undefined
   readonly clock: Clock
+  readonly newId: (() => string) | undefined
   readonly logger: Logger
 }
 
@@ -132,6 +138,7 @@ export function resolveConfig(input: HubConfigInput = {}): HubConfig {
     bootstrapDefaultRoom: input.bootstrapDefaultRoom ?? true,
     inviteSecret: input.inviteSecret,
     clock: input.clock ?? systemClock,
+    newId: input.newId,
     logger: input.logger ?? consoleLogger,
   })
 }

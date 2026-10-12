@@ -44,6 +44,7 @@ describe('claiming a handle (§2.1)', () => {
     } catch (error) {
       expect(isPeersError(error, 'handle_taken')).toBe(true)
       expect((error as { data?: { suggestion?: string } }).data?.suggestion).toBe('home-2')
+      expect((error as { data?: { same_member?: boolean } }).data?.same_member).toBe(false)
     }
   })
 
@@ -66,6 +67,11 @@ describe('claiming a handle (§2.1)', () => {
     h.join(s1, room, 'home')
     const s2 = h.open(alice.id, 'a2')
     expect(() => h.join(s2, room, 'home')).toThrow('taken')
+    try {
+      h.join(s2, room, 'home')
+    } catch (error) {
+      expect((error as { data?: { same_member?: boolean } }).data?.same_member).toBe(true)
+    }
     expect(h.join(s2, room, 'home', true)).toBe('home')
     const lost = h.link.of(s1, 'handle.lost')
     expect(lost).toHaveLength(1)

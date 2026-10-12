@@ -1,0 +1,23 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`agent-peers add -y installs into every supported agent, selftests, records and prints FINISH 1`] = `
+"[agent-peers] FINISH:
+  Claude Code: type /reload-plugins --force, then send any message (e.g. /peers:who)
+  Claude Desktop: quit and reopen Claude, then set agent-peers tools to "Always allow"
+  Codex CLI: restart codex (codex resume --last) → open /hooks → trust "peers" → send any message (e.g. $peers:who)
+  Codex desktop: open a new chat → Review hooks → trust "peers" → send any message
+"
+`;
+
+exports[`agent-peers add --dry-run prints the plan and changes nothing 1`] = `
+"dry run, nothing will change:
+  copy the running agent-peers binary to <TMP>/home/.agent-peers/bin/agent-peers-0.1.0 and point <TMP>/home/.agent-peers/bin/current at it
+  write the plugin trees to <TMP>/home/.agent-peers/plugins/0.1.0
+  Codex CLI:
+    $ <TMP>/bin/codex plugin marketplace add <TMP>/home/.agent-peers/plugins/0.1.0/codex-marketplace --json
+    $ <TMP>/bin/codex plugin add peers@agent-peers --json
+    back up <TMP>/home/.codex/config.toml, then set approval_mode = "approve" for peers_reply and peers_progress
+  Claude Desktop:
+    back up <TMP>/home/Library/Application Support/Claude/claude_desktop_config.json, then merge mcpServers["agent-peers-desktop"] = { command: <TMP>/home/.agent-peers/bin/current, args: [mcp, --surface, claude-desktop] }
+"
+`;

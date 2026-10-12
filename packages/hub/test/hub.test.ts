@@ -42,6 +42,13 @@ function recordingLogger(): Logger & { warnings: string[] } {
 }
 
 describe('createHub', () => {
+  it('uses an injected id generator for rows', () => {
+    let n = 0
+    const hub = make({ newId: () => `01JDEMO000000000000000000${n++}` })
+    const issued = hub.services.members.create('alice')
+    expect(issued.member.id).toBe('01JDEMO0000000000000000000')
+  })
+
   it('starts both listeners, bootstraps the default room and serves mounts', async () => {
     const hub = make({
       mounts: (ctx) => ({

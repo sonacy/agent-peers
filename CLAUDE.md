@@ -35,6 +35,7 @@ The docs are the spec. If the code has to diverge from them, update the doc in t
 | `packages/cli` | The `agent-peers` binary: installer, `join`, `hub`, `invite`, `dashboard`, shell commands, `mcp`, `hook`. |
 | `adapters/*` | Plugin trees for Claude Code and Codex, and the Claude Desktop config. |
 | `test/e2e` | Simulated-surface lifecycle tests. These run in CI. |
+| `test/dashboard-e2e` | Playwright + axe against seeded demo hubs (`bun run test:dashboard-e2e`). Opt-in, needs `bunx playwright install chromium`. |
 | `test/live` | Real agents. Opt-in: `AGENT_PEERS_LIVE=1`. |
 
 ## Conventions

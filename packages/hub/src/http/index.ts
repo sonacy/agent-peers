@@ -13,7 +13,7 @@ import { createSettings } from './settings'
 import { createStreamRegistry } from './sse'
 import type { HttpContext, HttpOptions, Limiters, RateLimits, ResolvedHttpOptions } from './types'
 
-export { renderInstallScript } from './install-script'
+export { renderInstallScript, renderReleaseInstallScript } from './install-script'
 export type { AssetBody, AssetMap, HttpOptions, RateLimits, StaticSource } from './types'
 
 const MINUTE = 60_000

@@ -1,0 +1,26 @@
+{
+  "name": "@agent-peers/cli-{{platform}}-{{arch}}",
+  "version": "0.0.0-dev",
+  "description": "The agent-peers binary for {{platform}}-{{arch}}. Install @agent-peers/cli instead.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonacy/agent-peers.git",
+    "directory": "npm/platform"
+  },
+  "homepage": "https://github.com/sonacy/agent-peers#readme",
+  "os": [
+    "{{platform}}"
+  ],
+  "cpu": [
+    "{{arch}}"
+  ],
+  "files": [
+    "bin",
+    "README.md"
+  ],
+  "preferUnplugged": true,
+  "publishConfig": {
+    "access": "public"
+  }
+}

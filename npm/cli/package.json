@@ -1,0 +1,42 @@
+{
+  "name": "@agent-peers/cli",
+  "version": "0.0.0-dev",
+  "description": "agent-peers: connect AI coding-agent sessions (Claude Code, Codex, Claude Desktop) into shared rooms",
+  "license": "MIT",
+  "type": "commonjs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sonacy/agent-peers.git",
+    "directory": "npm/cli"
+  },
+  "homepage": "https://github.com/sonacy/agent-peers#readme",
+  "bugs": "https://github.com/sonacy/agent-peers/issues",
+  "keywords": [
+    "agent-peers",
+    "claude-code",
+    "codex",
+    "mcp",
+    "multi-agent"
+  ],
+  "bin": {
+    "agent-peers": "bin/agent-peers.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {
+    "@agent-peers/cli-darwin-arm64": "0.0.0-dev",
+    "@agent-peers/cli-darwin-x64": "0.0.0-dev",
+    "@agent-peers/cli-linux-x64": "0.0.0-dev",
+    "@agent-peers/cli-linux-arm64": "0.0.0-dev",
+    "@agent-peers/cli-win32-x64": "0.0.0-dev"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

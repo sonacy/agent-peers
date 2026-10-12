@@ -108,7 +108,12 @@ export function createClaims(
     const online = holderOnline(row, session.id)
     if (row.member_id !== session.member_id || (online && request.takeover !== true)) {
       const suggestion = nextFreeName(handle, (name) => repos.handles.get(request.roomId, name) !== undefined)
-      throw new PeersError('handle_taken', `@${handle} is taken`, { handle, suggestion })
+      // same_member lets `agent-peers join` say "already joined as @h" instead of offering a suffix.
+      throw new PeersError('handle_taken', `@${handle} is taken`, {
+        handle,
+        suggestion,
+        same_member: row.member_id === session.member_id,
+      })
     }
     takeFrom(fx, row, session.id, online)
     repos.handles.setHolder(request.roomId, handle, session.id)

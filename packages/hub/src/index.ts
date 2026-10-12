@@ -7,7 +7,13 @@ export type { Clock, TimerHandle } from './clock'
 export { systemClock } from './clock'
 export * from './config'
 export type { HttpLayer } from './http/index'
-export { createHttpMounts, DEFAULT_RATE_LIMITS, renderInstallScript, resolveHttpOptions } from './http/index'
+export {
+  createHttpMounts,
+  DEFAULT_RATE_LIMITS,
+  renderInstallScript,
+  renderReleaseInstallScript,
+  resolveHttpOptions,
+} from './http/index'
 export type { AssetBody, AssetMap, HttpOptions, RateLimits, StaticSource } from './http/types'
 export type {
   AdminServer,

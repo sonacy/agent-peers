@@ -135,7 +135,7 @@ describe('cli program', () => {
     expect(await main(['--version'], io)).toBe(0)
     expect(io.out.join('')).toMatch(/^\d+\.\d+\.\d+\n$/)
     const unknown = memoryIo({})
-    expect(await main(['teleport'], unknown)).toBe(1)
+    expect(await main(['teleport'], unknown)).toBe(2)
     expect(unknown.err.join('')).toContain("unknown command 'teleport'")
   })
 })

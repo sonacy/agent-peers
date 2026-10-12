@@ -9,3 +9,4 @@ coverage/
 .agent-peers-test/
 playwright-report/
 test-results/
+test/dashboard-e2e/screenshots/

@@ -19,7 +19,7 @@ Bun bundles the app (HTML import + `bun-plugin-tailwind`) and it is embedded in 
 Members never type a token into the browser.
 
 - **In an agent:** `/peers:dashboard`. In the shell: `agent-peers dashboard`. Either one calls `dashboard.login` with the member token, gets a one-time code (5-minute expiry), and opens `<public_url>/app/login?c=<code>`.
-- **The login page** shows a **Continue** button only. A POST checks the Origin header, consumes the code, and sets an HttpOnly, SameSite=Strict session cookie (Secure when served over TLS) that lasts 7 days.
+- **The login page** shows a **继续** (Continue) button only, on a centered card under the Peers mark (`在这个浏览器里打开你的 Peers`). The hub serves the dashboard's own sign-in screen at `/app/login` when the dashboard is bundled, and a plain server page otherwise. A POST checks the Origin header, consumes the code, and sets an HttpOnly, SameSite=Strict session cookie (Secure when served over TLS) that lasts 7 days.
 - **Link preview bots** can't burn the code, because a GET never consumes it.
 - **No session:** show "打开你的 agent，输入 `/peers:dashboard`，会自动带你回来。" (Open your agent and type `/peers:dashboard`; it will bring you back here.)
 
@@ -30,7 +30,7 @@ Members never type a token into the browser.
 - **房间** (Rooms), with a badge for pending knocks on rooms you own
 - **问答** (Q&A)
 
-The active pill is solid ink with white text. Right side: the **Core pill** (hub connection status, §7) and the member avatar circle.
+The active pill is solid ink with white text (inverted to a light pill with ink text in the dark theme, `--active`). Right side: the **Core pill** (hub connection status, §7) and the member avatar circle.
 
 **Mobile, under 640px:** the top bar keeps only the logo, **+ 新建** (New) and the avatar. Navigation moves to a bottom tab bar that respects the safe area.
 
@@ -56,6 +56,7 @@ Playful and slightly neo-brutalist: chunky ink outlines, hard offset shadows, pa
 | `--muted` | `#6B6888` | secondary text |
 | `--primary` | `#7357FF` (violet) | primary buttons (新建房间, 复制邀请, 开门), toggles, links |
 | `--primary-soft` | `#CDBFFF` | room hero band, selected states |
+| `--primary-ink` | `#5536D9` (dark theme `#C4B5FF`) | violet text on the tint and on dark surfaces (chips, links), where `--primary` is under 4.5:1 |
 | `--lime` | `#DFF26B` | answer bubbles, the "拉朋友进来" panel, role chips (房主), step 1 badge |
 | `--lime-ink` | `#2D3A00` | text on lime |
 | `--warn` | `#FFF4D6` / ink `#7A5200` | reachability hints, the localhost warning |
@@ -65,7 +66,7 @@ Playful and slightly neo-brutalist: chunky ink outlines, hard offset shadows, pa
 
 **Face colors.** There are 6 pastel face colors: violet `#C9B8FF`, sky `#A9DDF0`, butter `#F2D36B`, mint `#C4EBA5`, blush `#F4B9C4` and cloud `#DCE0EA`. A face's color is chosen by `hash(agent_session_id) % 6`, so the same agent has the same color everywhere. People (member avatars) use the same palette, hashed by `member_id`, in a circle instead of a square.
 
-**Dark theme.** Same structure. `--bg #0F0E1A`, `--surface #1A1830`. Outlines and shadows become `#000` at 60%, and lime and violet keep their hue. All colors are defined as tokens and applied through Tailwind theme variables.
+**Dark theme.** Same structure. `--bg #0F0E1A`, `--surface #1A1830`. Outlines (cards, chips, doors, faces, inputs) use their own `--outline` token, `#7069AD`, which reaches at least 3:1 against `--surface` and `--surface-2` (WCAG non-text contrast); the hard shadows stay solid `#000` for depth. Active pills (nav, tabs, segments, filter chips, the `我` chip) are inverted: a `#F3F1FB` pill with ink text, and inactive pills carry a 1.5px `--outline` border. Knock items use a neutral raised surface with a 3px blush left accent instead of a blush tint. Lime and violet keep their hue. All colors are defined as tokens and applied through Tailwind theme variables.
 
 **Shape**
 - Cards: `rounded-2xl`, 2px `--ink` border, hard shadow `4px 4px 0 var(--ink)`, no blur.
@@ -112,7 +113,7 @@ A **room** uses a door glyph (a tall rounded rectangle with a knob) in the room'
 The hero is shown until it is dismissed, or once the member has at least one room with two or more agents.
 
 **我的 agent section**
-- **Filter chips:** `全部 4 · 有空 2 · 正在忙 1 · 离线 1` (All · Idle · Busy · Offline).
+- **Filter chips:** `全部 4 · 有空 2 · 正在忙 1 · 离线 1` (All · Idle · Busy · Offline). An agent that is `awaiting input` counts as 正在忙.
 - **Grid:** 4 columns at ≥1280px, 3 at ≥1024px, 2 at ≥640px, 1 below that.
 - **AgentCard** contents:
   - Face (44).
@@ -167,10 +168,11 @@ On submit, go to the room page with the invite panel focused.
 ### 4.3 Room detail (`/app/rooms/:id`)
 
 **Hero band** (violet-soft, full width):
-- Big door (64) and the room name in display type.
+- Big door (64, white fill with the room's color as an inner panel, so a violet room's door still reads on the violet band) and the room name in display type.
 - Chips: `你是房主` / `你是成员` (you are the owner / a member), `{p} 人 · {a} 个 agent`, `{date} 创建` (created on).
 - Owner action: **解散房间** (Dissolve room), danger outline, with a confirm dialog that requires typing the room name.
 - Member action: **退出房间** (Leave room).
+- **Phones (<640px):** one compact row, `‹ name ⋯`, over a single horizontally scrolling chip row. The `⋯` opens a bottom sheet with 解散房间 / 退出房间.
 
 **Two columns at ≥1024px.** On the left is 房间里的人 (people in the room). On the right is a 320px side column with 拉朋友进来, 有人在敲门 and 被请出的人.
 
@@ -179,10 +181,11 @@ On submit, go to the room page with the invite panel focused.
 - One **MemberGroup** card per person. Me first, then by most recent activity.
 - **Group header:** person avatar (circle), name, chips (`房主`, and `我` (me) in dark), plus `{n} 个 agent · {k} 个有空` (n agents · k idle) and the avatar stack.
 - **Owner actions on other people:**
-  - **请出房间** (Remove from room), danger outline. On mobile this lives in a `⋯` bottom sheet.
+  - **请出房间** (Remove from room), danger outline. In big rooms it lives in a quiet `⋯` menu next to the collapse chevron, and on mobile in a `⋯` bottom sheet. Every path asks first, because a kick also rotates the room's invite (PROTOCOL §9): `{name} 和他的 agent 会离开房间，之后不能再用邀请码进来。为了这一点邀请码也会换新，之前发出去的邀请都失效。` The success toast says so too: `已请 {name} 出房间，邀请码换新了，要拉人记得重新复制邀请`.
+- **My own group** has a violet (`--primary`) outline in every room.
 - **Group body:** AgentChips in a responsive grid. Each chip shows the face (28), the truncated title, `{status} · {tool}`, and a `⇥` button on my agents and to owners. The `⇥` button is **移出房间** (remove this agent from the room). It releases the agent's handle but keeps the person's grant.
 - **Big rooms:** groups collapse to the header, showing at most 6 chips plus `再看 9 个` (Show 9 more). The list is virtualized. Loading shows `已显示 20 / 128 人` and **加载更多** (Load more).
-- **Filters:** `全部 · 有空 31 · 正在忙 9 · 离线 200`, plus an `只看我的` (Mine only) switch and a search box `找人或 agent` (find a person or agent).
+- **Filters:** a search box `找人或 agent` (find a person or agent) on its own line, then `全部 · 有空 31 · 正在忙 9 · 离线 200` (scrolling sideways when it doesn't fit) and an `只看我的` (Mine only) switch.
 
 **拉朋友进来** (Invite friends): lime panel, owner only. Members instead see a note: `只有房主 {owner} 能拉人和管理成员。想拉人，找房主要一段邀请。你能管的是自己的 agent：暂停、改名、移出。` ("Only the owner can invite and manage members. Ask the owner for an invite. You can manage your own agents: pause, rename, remove.")
 - **Copy:** `复制邀请发给同事，他贴给自己的 agent 就进来了。邀请一直有效，直到你换掉或关掉。` ("Copy the invite and send it to a teammate; they paste it into their agent and they're in. The invite stays valid until you replace or close it.")
@@ -195,7 +198,7 @@ On submit, go to the room page with the invite panel focused.
 
 **有人在敲门** (Someone is knocking): owner only. A blush-tinted list with a count badge (`99+` above 99).
 - **Item:** person avatar, name, relative time, and their message in a quote box. Buttons: **开门** (Let in, primary) and **先不了** (Not now).
-- **Big lists:** show the first 3, then `全部 128 条` (All 128) and **全部开门…** (Let everyone in…), which needs confirmation.
+- **Big lists:** show the first 3, then `全部 128 条` (All 128) and **全部开门…** (Let everyone in…), which needs confirmation. Bulk actions (全部开门, 把他的 agent 全部移出) send a few requests at a time; if only some go through, those stay done and a danger toast says `已开门 N 个，M 个没成功` with the reason.
 
 **被请出的人** (Removed people): a collapsible `▸ 被请出的 5 人` (5 removed). Each entry has **恢复** (Restore), which re-grants member access.
 
@@ -210,7 +213,7 @@ On submit, go to the room page with the invite panel focused.
 **Header.** Title `问答` with the subline `你的 agent 问过别人的、被别人问过的，都在这里。` ("Everything your agents asked others or were asked, all in one place."). Segmented control: `全部 · 我问的 · 问我的` (All · Asked by me · Asked of me).
 
 **QAThread card** (newest first, infinite scroll):
-- **Header row:** asker face + title (+ `· {member}` when it's someone else's), then `→`, then target face + title. On the right: a room chip and a time (§8).
+- **Header row:** asker face (28) + title (+ `· {member}` when it's someone else's), then `→`, then target face (28) + title, each up to half the row with the full title in a tooltip. On the right: a room chip (the room's display name) and a time (§8). Below 640px the room chip and time move to their own row above the participants.
 - **Question:** a grey bubble on the left.
 - **Answer:** a lime bubble on the right, with a `✓ 已回答` (Answered) footer.
 
@@ -222,7 +225,7 @@ On submit, go to the room page with the invite panel focused.
 | `declined` | `对方没接这个问题：{reason}` ("They didn't take this question: {reason}") |
 | `failed` or `expired` | `⊘ 没答上：{reason}` ("⊘ Not answered: {reason}"), with reasons mapped to plain words (§8) |
 
-- **Long answers** collapse after 8 lines behind **展开全文** (Expand). Code blocks get dark mono styling with horizontal scroll. Links wrap.
+- **Long answers** collapse after 8 lines behind **展开全文** (Expand). While collapsed, the clipped part can't take keyboard focus; screen readers hear the start and the button, and expanding moves focus into the answer. Code blocks get dark mono styling with horizontal scroll. Inline `code` spans are mono on a subtle chip in the bubble's text color. Links wrap.
 
 ## 5. States (every list and card must handle these)
 
@@ -232,8 +235,9 @@ On submit, go to the room page with the invite panel focused.
 | **Empty: no agents in a room** | Sleeping face, `还没有 agent 进房间`, `没进房间的对话不会上报，这里只显示进过房间的。在任意对话里说：` and the command `/peers:room new 名字`. |
 | **Empty: no rooms** | Door, `一个房间都还没有`, `自己开一个，或者找同事的房间敲门。`, with **新建房间** and **找房间**. |
 | **Empty: no Q&A** | Two faces, `它们还没说过话`, `在 agent 里输入 /peers:ask，第一个问同房间的 agent 问问题。` |
-| **Error: hub unreachable** | Danger-tinted banner `连不上 Core（{host}），{n} 秒后重试` with **现在重试**. Keep the last data, dimmed, labelled `（上次的数据，等 Core…）`. |
-| **Outdated plugin** | On an agent card: `这个 agent 的 Peers 插件是 {v}，Core 要 {min} 以上。升级后完全退出再打开这个 agent。` and **复制升级命令** (Copy upgrade command). |
+| **Error: hub unreachable** | Danger-tinted banner `连不上 Core（{host}），{n} 秒后重试` with **现在重试**, carrying the chip `（上次的数据，等 Core…）` and `连上 Core 后再改`. Keep the last data, greyed out (desaturated rather than faded, so it stays readable) and inert, so nothing can be changed until Core is back. Dialogs, sheets and menus that float above the page disable their submit with `连上 Core 后再改`, and the phone top bar's `+` is held back. Only `连不上 Core（{host}）` is announced to screen readers; the ticking countdown is not. Filters, paging and typed text survive the drop. |
+| **Error: no account info** | If `me` never loaded (Core down or slow on first load) and the hub banner isn't showing: `没拿到你的账号信息` with **重试**. The event stream starts regardless of `me`, so its backoff recovers the page, and each stream failure re-asks `me` so an expired session lands on the sign-in page instead of a banner. |
+| **Outdated plugin** | On an agent card: `这个 agent 的 Peers 插件是 {v}，Core 要 {min} 以上。升级后完全退出再打开这个 agent。` and **复制升级命令** (Copy upgrade command, which copies `curl -fsSL <hub>/install.sh \| sh`). The session card carries no `min_adapter`, so until it does the card says `Core 要更新的版本` instead of `{min} 以上`. |
 | **Boundary-tier reminder** | `它有 1 个问题等着答，但已经过了 60 分钟窗口。在 Cursor 的这个对话里随便发句话，这一轮结束后它就会开始答。` |
 | **Member perspective** | See the members note in §4.3. |
 | **Invite closed** | See §4.3. |
@@ -256,7 +260,7 @@ On submit, go to the room page with the invite panel focused.
 |---|---|
 | Connected | `● Core 已连接` (Core connected), green dot |
 | Reconnecting | `◌ 正在连 Core…` (Connecting to Core…) |
-| Disconnected | `○ 连不上 Core`, danger, with a hover card showing the URL, the last error and the next retry time |
+| Disconnected | `○ 连不上 Core`, danger, a button that opens a popover (click or tap, so touch screens reach it) showing the URL, the last error and the next retry time |
 
 The pill reflects the SSE connection to the hub, which retries with backoff (1s → 30s).
 
@@ -272,7 +276,7 @@ The pill reflects the SSE connection to the hub, which retries with backoff (1s 
 | This year | `10 月 3 日` |
 | Older | `2025 年 12 月 3 日` |
 
-Full timestamps are in tooltips.
+Full timestamps are in tooltips. Tooltips open on hover, on keyboard focus (clipped titles become tab stops) and on a tap, and screen readers get the full timestamp as text.
 
 **Counts** cap at `99+`.
 
@@ -310,7 +314,8 @@ Full timestamps are in tooltips.
 | <640 | Phone layout |
 
 **Phone layout**
-- Bottom tab bar.
+- Bottom tab bar. The home header drops **+ 新建房间** (the top bar's `+` covers it).
+- Agent cards are compact: status and room tags share one row, and 接受提问 moves to the card's `⋯` menu.
 - Single-column cards, with faces shrunk to 44px.
 - Filter chip rows scroll horizontally instead of wrapping.
 - Room detail is split into tabs.
@@ -321,11 +326,13 @@ Full timestamps are in tooltips.
 
 The same SPA in operator mode, signed in with the admin token and a cookie. In v0 it is minimal:
 - **Hub status:** public URL, connected sessions, version, uptime.
-- **Settings:** `public_url`, registration mode, retention, rate limits.
-- **All rooms and members** (read-only, plus dissolve and token revoke).
-- **Rotate admin token.**
+- **Settings:** `public_url` and registration mode are editable and take effect at once (until the hub restarts; the startup flags stay the persistent source). Retention, message and request rate limits, heartbeat and grace come from startup flags and are shown read-only.
+- **All rooms and members** (read-only, plus dissolve and token revoke, shown as quiet text buttons that turn danger-outlined on row hover or focus).
+- **Rotate admin token.** The new token is shown once; this browser stays signed in.
 
-The member screens are not available in operator mode.
+The member screens are not available in operator mode. The bundle references its files under `/app/` (its `publicPath`), so the admin listener also serves those files (never pages) under `/app/`.
+
+**Local preview:** `bun run --filter @agent-peers/dashboard demo` starts an in-memory hub seeded through real bridge sessions with the mockup's world (gulei's four agents, timely / 支付联调 / a closed-invite room / a ~120-person room, discoverable rooms to knock on (one already knocked), he-yu in 13 rooms, xiao-bai with none, pending knocks, Q&A in every state). Ids are deterministic (fixed ULIDs in seeding order), so every face keeps its color run to run and prints a one-time sign-in link and the operator URL. Member names use `-` where the mockup shows `.` (`zhang-wei`), because hub names are `^[a-z0-9][a-z0-9_-]*$`.
 
 ## 11. Data and live updates (the member API in PROTOCOL.md §9)
 
@@ -337,6 +344,7 @@ The member screens are not available in operator mode.
 | `agents` | `GET /v0/me/sessions` |
 | `rooms` | `GET /v0/me/rooms` |
 | `roomSearch(q)` | `GET /v0/rooms/search?q=` |
+| `myKnocks` | `GET /v0/me/knocks` (my pending knocks: the 等开门 rows and 撤回) |
 | `room(id)` | `GET /v0/me/rooms/:id`, which returns members grouped by person, my role, and (owner only) invite, knocks and kicked list |
 | `asks(filter, cursor)` | `GET /v0/me/asks` |
 
@@ -358,4 +366,6 @@ The member screens are not available in operator mode.
   - Core-disconnected banner
 
   Viewports: 1280, 800 and 390, in light and dark.
+
+  They live in `test/dashboard-e2e` (`bun run test:dashboard-e2e`): every test gets its own seeded demo hub from a Bun fixture server, signs in through a real one-time link, and checks the member API as well as the screen. The screen tour saves full-page screenshots per viewport and theme to `test/dashboard-e2e/screenshots/` for design QA.
 - **Accessibility:** axe checks on every screen in the Playwright run.

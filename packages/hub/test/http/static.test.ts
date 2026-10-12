@@ -45,6 +45,19 @@ describe('member SPA under /app', () => {
     expect((await fetch(`${h.base}/app/assets`)).status).toBe(200)
   })
 
+  it('renders the bundled sign-in screen at /app/login, and the server page without an index', async () => {
+    h = await startHttpHub({ http: { dashboard: { dir: await dashboardDir() } } })
+    const spa = await fetch(`${h.base}/app/login?c=abc`)
+    expect(spa.status).toBe(200)
+    expect(spa.headers.get('content-security-policy')).toStartWith("default-src 'self'")
+    expect(await spa.text()).toContain('id="root"')
+    await h.stop()
+    h = await startHttpHub({ http: { dashboard: { assets: { 'assets/x.js': '1' } } } })
+    const plain = await (await fetch(`${h.base}/app/login?c=abc`)).text()
+    expect(plain).toContain('Continue')
+    expect(plain).toContain('value="abc"')
+  })
+
   it('never serves files outside the dashboard directory', async () => {
     h = await startHttpHub({ http: { dashboard: { dir: await dashboardDir() } } })
     for (const path of [
@@ -75,6 +88,23 @@ describe('member SPA under /app', () => {
     const placeholder = await fetch(`${h.base}/app/`)
     expect(placeholder.status).toBe(200)
     expect(await placeholder.text()).toContain('not bundled')
+  })
+
+  it('serves the bundle files (not pages) under /app/ on the admin listener too', async () => {
+    const assets = new Map<string, string>([
+      ['index.html', '<!doctype html><script src="/app/chunk.js"></script>'],
+      ['chunk.js', 'export {}'],
+    ])
+    h = await startHttpHub({ http: { dashboard: { assets } } })
+    const js = await fetch(`${h.adminBase}/app/chunk.js`)
+    expect(js.status).toBe(200)
+    expect(js.headers.get('content-type')).toContain('text/javascript')
+    for (const path of ['/app/', '/app/index.html', '/app/rooms', '/app/missing.js', '/app/..%2fx.js']) {
+      expect((await fetch(`${h.adminBase}${path}`)).status).toBe(404)
+    }
+    await h.stop()
+    h = await startHttpHub()
+    expect((await fetch(`${h.adminBase}/app/chunk.js`)).status).toBe(404)
   })
 
   it('shows a placeholder when no dashboard is configured, on both listeners', async () => {

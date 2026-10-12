@@ -1,0 +1,97 @@
+/* Color tokens (DASHBOARD.md §3). Light by default; dark via prefers-color-scheme or [data-theme="dark"]. */
+/*
+ * --line is the 2px outline (cards, chips, doors, faces); --shadow is the hard offset shadow. They are
+ * both ink in light. In dark the outline is its own violet-grey (--outline, ≥3:1 on --surface and
+ * --surface-2, WCAG non-text contrast) and the shadow stays solid #000 for depth.
+ * --active / --on-active fill active pills (nav, tabs, segments, filter chips, the 我 chip): ink in
+ * light, inverted to a light pill in dark so it stands out on the near-black page.
+ */
+:root {
+  --bg: #f3f1fb;
+  --surface: #ffffff;
+  --surface-2: #f1eff8;
+  --ink: #16142b;
+  --line: #16142b;
+  --outline: #16142b;
+  --shadow: #16142b;
+  --active: #16142b;
+  --on-active: #ffffff;
+  --muted: #6b6888;
+  --primary: #7357ff;
+  --on-primary: #ffffff;
+  --primary-soft: #cdbfff;
+  --primary-tint: #ece7ff;
+  /* Violet text (chips, links): --primary itself is under 4.5:1 on the tint and on dark surfaces. */
+  --primary-ink: #5536d9;
+  --lime: #dff26b;
+  --lime-ink: #2d3a00;
+  --warn: #fff4d6;
+  --warn-ink: #7a5200;
+  --danger: #c2412d;
+  --danger-soft: #fdf0ec;
+  --blush: #f4b9c4;
+  --blush-soft: #fdf1f3;
+  /* A pending knock: blush-tinted in light, a neutral raised surface (+4% white) in dark. */
+  --knock-item: var(--blush-soft);
+  --ok: #16a34a;
+  --busy: #f59e0b;
+  --ink-fill: #16142b;
+  --on-ink: #ffffff;
+  --face-ink: #16142b;
+  --face-violet: #c9b8ff;
+  --face-sky: #a9ddf0;
+  --face-butter: #f2d36b;
+  --face-mint: #c4eba5;
+  --face-blush: #f4b9c4;
+  --face-cloud: #dce0ea;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f0e1a;
+    --surface: #1a1830;
+    --surface-2: #24213f;
+    --ink: #edebfa;
+    --outline: #7069ad;
+    --line: var(--outline);
+    --shadow: #000000;
+    --active: #f3f1fb;
+    --on-active: #16142b;
+    --knock-item: color-mix(in srgb, var(--surface) 96%, #ffffff);
+    --muted: #a6a2c6;
+    --primary-soft: #3b3080;
+    --primary-tint: #2b2456;
+    --primary-ink: #c4b5ff;
+    --warn: #3a2f12;
+    --warn-ink: #f5d58a;
+    --danger: #f0735c;
+    --danger-soft: #3b1c17;
+    --blush-soft: #3a2029;
+    --ink-fill: #000000;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f0e1a;
+  --surface: #1a1830;
+  --surface-2: #24213f;
+  --ink: #edebfa;
+  --outline: #7069ad;
+  --line: var(--outline);
+  --shadow: #000000;
+  --active: #f3f1fb;
+  --on-active: #16142b;
+  --knock-item: color-mix(in srgb, var(--surface) 96%, #ffffff);
+  --muted: #a6a2c6;
+  --primary-soft: #3b3080;
+  --primary-tint: #2b2456;
+  --primary-ink: #c4b5ff;
+  --warn: #3a2f12;
+  --warn-ink: #f5d58a;
+  --danger: #f0735c;
+  --danger-soft: #3b1c17;
+  --blush-soft: #3a2029;
+  --ink-fill: #000000;
+}

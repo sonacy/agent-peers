@@ -1,5 +1,6 @@
 /**
- * Member sign-in (DASHBOARD §1, ONBOARDING §1): `GET /app/login` renders a Continue button only; the
+ * Member sign-in (DASHBOARD §1, ONBOARDING §1): `GET /app/login` renders a Continue button only (the
+ * dashboard's own sign-in screen when it is bundled, else a plain server page); the
  * POST checks Origin, consumes the one-time `dashboard.login` code and sets the member cookie
  * (HttpOnly, SameSite=Strict, Secure under TLS, 7 days). The member API requires that cookie.
  */
@@ -17,6 +18,7 @@ import {
   requireOrigin,
   setSessionCookie,
 } from './security'
+import { serveSpaIndex } from './static'
 import type { AppEnv, HttpContext } from './types'
 
 const MAX_CODE_CHARS = 128
@@ -87,7 +89,13 @@ export function requireMember(ctx: HttpContext): MiddlewareHandler<AppEnv> {
 }
 
 export function mountMemberAuth(app: Hono<AppEnv>, ctx: HttpContext, origin: OriginGuardOptions): void {
-  app.get('/app/login', (c) => loginPage(c.req.query('c') ?? c.req.query('code')))
+  // With the dashboard bundled, its sign-in screen (Chinese, styled, same Continue-only POST) renders
+  // the page; GET never consumes the code either way.
+  app.get(
+    '/app/login',
+    async (c) =>
+      (await serveSpaIndex(ctx.options.dashboard)) ?? loginPage(c.req.query('c') ?? c.req.query('code')),
+  )
   app.post(
     '/app/login',
     requireOrigin(origin),

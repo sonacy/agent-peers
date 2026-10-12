@@ -33,9 +33,9 @@ The protocol is agent-neutral. Getting a message into a particular agent is adap
 | Current state of the handle | Result |
 |---|---|
 | Free | Claimed |
-| Held by **another member**, online or offline | `handle_taken`. The bridge proposes `name-2`. |
+| Held by **another member**, online or offline | `handle_taken` with data `{ handle, suggestion, same_member: false }`. The bridge proposes the suggestion. |
 | Held by the same member; holder `offline` or `stale` | Claimed. Open asks move to the new holder (§6.2). |
-| Held by the same member; holder `online` | `handle_taken`, unless `takeover: true` is passed. The old holder gets `handle.lost`. |
+| Held by the same member; holder `online` | `handle_taken` with `same_member: true` (so `join` can say "already joined as @h"), unless `takeover: true` is passed. The old holder gets `handle.lost`. |
 
 - **Who may send `takeover: true`:** bridges must **never** send it on their own initiative. It is reserved for an explicit user command (`join … as X --takeover`).
 - **Continuity across `/clear`, `/resume` and restarts:** handled by `supersedes` (§4), not by takeover.
@@ -326,7 +326,7 @@ If a turn ends without a `peers_reply` for an ask it claimed:
   - Member, admin and invite secrets are stored on the hub **only as SHA-256 hashes**.
   - The bridge stores member tokens per hub origin in `~/.agent-peers/credentials.json` (0600).
 - **Bootstrap.** On first start, a self-hosted hub (default `registration: invite-only`) creates a room named `default` and prints an invite URL for it. `agent-peers invite [room]` on the hub host mints more invites, using the admin token.
-- **Admin token.** Created at first `agent-peers hub` start. It is written to `~/.agent-peers/admin-token` (0600) on the hub host and can be replaced with `agent-peers hub rotate-admin-token`.
+- **Admin token.** Created at first `agent-peers hub` start. It is written to `<data-dir>/admin-token` (0600; the data dir defaults to `~/.agent-peers/hub`, set with `--data-dir`) on the hub host and can be replaced with `agent-peers hub rotate-admin-token`. `agent-peers invite` and `agent-peers rooms` read it and call the admin API with `Authorization: Bearer`; a running hub records its listeners in `<data-dir>/hub.json` so they find the admin port.
 - **Invites.**
   - 16-character base32 codes (80 bits) carried in a URL: `<public_url>/j/<code>`.
   - The bridge takes the code from the last path segment and the hub base from the URL origin. It then redeems through the WebSocket (`room.join { invite_code }`), or through `POST /v0/invites/redeem { code, member_name }` when it holds no token for that hub yet. That call returns `{ member_token, grant }`. The redeem follows the same transport rule as the WebSocket (plain `http://` only to loopback, LAN and tailnet hosts, or with `--insecure`) and never follows a redirect.
@@ -351,7 +351,7 @@ If a turn ends without a `peers_reply` for an ask it claimed:
 
 | Method | Member endpoints |
 |---|---|
-| `GET` | `me` · `sessions` · `rooms` · `rooms/:id` (members grouped by person; owner extras: invite, knocks, kicked) · `asks?filter=all\|mine\|to_me&cursor=` · `events` (SSE) · `/v0/rooms/search?q=` |
+| `GET` | `me` · `sessions` · `rooms` · `rooms/:id` (members grouped by person; owner extras: invite, knocks, kicked) · `asks?filter=all\|mine\|to_me&cursor=` · `knocks` (my pending knocks) · `events` (SSE) · `/v0/rooms/search?q=` |
 | `POST` | `rooms` (create) · `rooms/:id/knock { note? }` · `knocks/:id/decide { decision }` · `rooms/:id/invite/rotate\|close\|reopen` · `rooms/:id/restore/:member` · `rooms/:id/exit` · `logout` |
 | `PATCH` | `sessions/:id { accepting?, title?, handle?, room_id? }` |
 | `DELETE` | `rooms/:id/sessions/:sid` (remove an agent) · `rooms/:id/grants/:member` (kick) · `rooms/:id` (dissolve) · `knocks/:id` (withdraw) |
@@ -372,7 +372,7 @@ The hub builds invite URLs from `--public-url`. It refuses to create invites whe
 | `DELETE` | `rooms/:id/grants/:member` (kick) · `invites/:id` · `members/:id/tokens` (revoke) |
 
 - **Remote admin.** Use an SSH tunnel to the admin port.
-- **Storage.** SQLite at `~/.agent-peers/hub.db`, with 30-day message retention.
+- **Storage.** SQLite at `<data-dir>/hub.db` (default `~/.agent-peers/hub/hub.db`), with 30-day message retention. `agent-peers hub service install` runs the hub as a per-user launchd agent (`~/Library/LaunchAgents/dev.agent-peers.hub.plist`) or systemd user unit (`~/.config/systemd/user/agent-peers-hub.service`) with the same flags.
 
 ## 10. Rooms, invites and knocks
 

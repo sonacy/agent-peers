@@ -30,10 +30,10 @@ describe('agent-peers mcp', () => {
 
   it('rejects an unknown surface and a missing one', async () => {
     const io = memoryIo({ AGENT_PEERS_HOME: dir })
-    expect(await main(['mcp', '--surface', 'gemini'], io)).toBe(1)
+    expect(await main(['mcp', '--surface', 'gemini'], io)).toBe(2)
     expect(io.err.join('')).toContain('--surface must be one of')
     const missing = memoryIo({})
-    expect(await main(['mcp'], missing)).toBe(1)
+    expect(await main(['mcp'], missing)).toBe(2)
     expect(missing.err.join('')).toContain("required option '--surface <surface>'")
   })
 

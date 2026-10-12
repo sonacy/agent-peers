@@ -1,0 +1,27 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`codex config.toml approvals appends the approval block and keeps comments 1`] = `
+"# my codex config
+model = "gpt-6"
+
+[plugins."peers@agent-peers"]
+enabled = true # set by codex plugin add
+
+# agent-peers: auto-approve the peers reply tools (\`agent-peers remove\` deletes this block)
+[plugins."peers@agent-peers".mcp_servers.peers.tools.peers_reply]
+approval_mode = "approve"
+
+[plugins."peers@agent-peers".mcp_servers.peers.tools.peers_progress]
+approval_mode = "approve"
+"
+`;
+
+exports[`codex config.toml approvals re-serializes when the tables already exist in another shape 1`] = `
+"[plugins."peers@agent-peers".mcp_servers.peers.tools.peers_reply]
+enabled = true
+approval_mode = "approve"
+
+[plugins."peers@agent-peers".mcp_servers.peers.tools.peers_progress]
+approval_mode = "approve"
+"
+`;

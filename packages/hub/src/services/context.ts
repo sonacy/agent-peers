@@ -141,7 +141,7 @@ export function createDeps(input: DepsInput): ServiceDeps {
     events,
     link,
     runtime: input.runtime,
-    newId: () => ulid(clock.now()),
+    newId: config.newId ?? (() => ulid(clock.now())),
     now: () => clock.now(),
     tx,
   }

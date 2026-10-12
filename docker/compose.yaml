@@ -1,0 +1,21 @@
+# The agent-peers hub with Docker Compose (see docker/Dockerfile for the image).
+#
+#   docker compose -f docker/compose.yaml up -d
+#   docker compose -f docker/compose.yaml exec hub agent-peers invite payments
+#
+# The admin listener (7338) is opted in with --admin-bind 0.0.0.0 and published on the host's
+# loopback ONLY. Reach it over SSH or Tailscale; never change it to "7338:7338".
+services:
+  hub:
+    image: ghcr.io/sonacy/agent-peers-hub:latest
+    container_name: agent-peers-hub
+    restart: unless-stopped
+    command: ["--public-url", "https://hub.example.com", "--admin-bind", "0.0.0.0"]
+    ports:
+      - "7337:7337"
+      - "127.0.0.1:7338:7338"
+    volumes:
+      - agent-peers-hub:/data
+
+volumes:
+  agent-peers-hub:

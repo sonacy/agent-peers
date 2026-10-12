@@ -1,0 +1,9 @@
+# Used when tests run from this package (`bun run test`): coverage for dashboard sources.
+[test]
+coverageSkipTestFiles = true
+coverageThreshold = { lines = 0.8, functions = 0.8 }
+coveragePathIgnorePatterns = ["../**", "test/**", "src/generated/**", "scripts/build.ts", "scripts/clean.ts", "scripts/dev.ts"]
+
+# `bun run dev`: HTML imports served by Bun.serve go through Tailwind.
+[serve.static]
+plugins = ["bun-plugin-tailwind"]

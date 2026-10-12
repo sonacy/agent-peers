@@ -1,7 +1,7 @@
 {
   "name": "@agent-peers/dashboard",
   "version": "0.1.0",
-  "description": "agent-peers hub admin dashboard (Preact SPA)",
+  "description": "agent-peers member dashboard (React SPA, embedded in the binary)",
   "license": "MIT",
   "type": "module",
   "repository": {
@@ -16,8 +16,46 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "dev": "bun --hot scripts/dev.ts",
+    "demo": "bun scripts/demo-hub.ts",
+    "build": "bun scripts/build.ts",
+    "clean": "bun scripts/clean.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test --coverage"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@agent-peers/protocol": "workspace:*",
+    "@fontsource/bricolage-grotesque": "^5.3.0",
+    "@fontsource/inter-tight": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@tanstack/react-query": "^5.104.2",
+    "@tanstack/react-virtual": "^3.14.15",
+    "bun-plugin-tailwind": "^0.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.55.0",
+    "motion": "^14.1.0",
+    "radix-ui": "^1.8.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tailwind-merge": "^3.7.0",
+    "tailwindcss": "^4.3.3",
+    "wouter": "^3.13.0",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@agent-peers/core": "workspace:*",
+    "@agent-peers/hub": "workspace:*",
+    "@axe-core/playwright": "^4.13.0",
+    "@happy-dom/global-registrator": "^21.0.1",
+    "@playwright/test": "^1.64.0",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "axe-core": "4.13.0",
+    "playwright": "1.64.0"
+  },
   "private": true
 }
