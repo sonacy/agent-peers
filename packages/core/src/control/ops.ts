@@ -33,12 +33,20 @@ export const RegisterParamsSchema = z.object({
   source: z.string().min(1).max(32),
   supersedes: LocalKeySchema.optional(),
   cwd: z.string().min(1).max(4096).optional(),
+  /** The agent's model from the hook input (Claude Code SessionStart `model`), shown on the card. */
+  model: z.string().min(1).max(200).optional(),
 })
 export const ActivityParamsSchema = z.object({
   ...keyed,
   state: ActivitySchema,
   /** UserPromptSubmit: a new turn starts (a peer turn left open by an interrupted turn is closed). */
   turn_start: z.boolean().optional(),
+  /**
+   * UserPromptSubmit: ask ids of agent-peers envelopes the prompt itself carries. Claude Code submits
+   * an asyncRewake wake as a queued prompt, which fires UserPromptSubmit: that prompt IS the peer
+   * turn, not a new turn that should close it.
+   */
+  carries: z.array(z.string().min(1).max(64)).max(16).optional(),
 })
 export const TakeParamsSchema = z.object({ ...keyed, max_chars: MaxCharsSchema })
 export const WaitParamsSchema = z.object({

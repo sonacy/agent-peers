@@ -51,6 +51,14 @@ export class Delivery {
   private pushes: Promise<void> = Promise.resolve()
   private pushInFlight = false
   private carrierExpected = false
+  /** A waiter took an envelope (asyncRewake): its wake prompt has not started yet. */
+  private wakePending = false
+  /** Another prompt started while that wake was still queued in the agent. */
+  private wakeOvertaken = false
+  /** One Stop already passed while that wake was still queued in the agent. */
+  private wakeHeld = false
+  /** The waiter's hand-outs that wake carries, re-queued if the wake turns out to be lost. */
+  private wakeInjectIds: readonly string[] = []
   private retryTimer: TimerHandle | undefined
 
   constructor(
@@ -92,6 +100,10 @@ export class Delivery {
       throw error
     }
     if (options.inline === true) this.host.queue.confirm([out.inject_id])
+    else if (channel === 'wait') {
+      this.wakePending = true
+      this.wakeInjectIds = [...this.wakeInjectIds, out.inject_id]
+    }
     return out
   }
 
@@ -173,14 +185,52 @@ export class Delivery {
 
   /**
    * UserPromptSubmit. `carrier`: this prompt carries our own envelope (a queued push, a Stop-hook
-   * continuation). Otherwise a peer turn still open from an earlier agent turn (StopFailure, an
-   * interrupt) is `stale` and must be abandoned.
+   * continuation, or a waiter's wake whose ask ids are in `carries`). A peer turn whose wake is still
+   * on its way is not stale either: Claude Code may run the user's prompt first and absorb the wake
+   * into it. Otherwise a peer turn still open from an earlier agent turn (StopFailure, an interrupt)
+   * is `stale` and must be abandoned.
+   *
+   * A second prompt without the wake after a held Stop means the wake was lost (Esc dropped the
+   * queued prompt): its envelopes go back to the queue, this prompt's `take` delivers them inline,
+   * and this prompt carries the peer turn from here.
    */
-  beginTurn(): { readonly stale: boolean; readonly carrier: boolean } {
-    const carrier = this.carrierExpected
+  beginTurn(carries: readonly string[] = []): { readonly stale: boolean; readonly carrier: boolean } {
+    const turn = this.host.queue.peerTurn
+    const carriesOurs = turn !== null && carries.some((id) => turn.ask_ids.includes(id))
+    const lostWake = this.wakeHeld && !carriesOurs && turn !== null
+    const carrier = this.carrierExpected || carriesOurs || lostWake
+    const waking = this.wakePending && !carriesOurs && !lostWake
     this.carrierExpected = false
     this.pushInFlight = false
-    return { stale: !carrier && this.host.queue.peerTurn !== null, carrier }
+    if (lostWake) this.redeliverWake()
+    if (carriesOurs || lostWake) this.clearWake()
+    else if (waking) this.wakeOvertaken = true
+    return { stale: !carrier && !waking && turn !== null, carrier }
+  }
+
+  private redeliverWake(): void {
+    this.host.log(`wake lost before its prompt ran: re-delivering ${this.wakeInjectIds.join(', ')} inline`)
+    this.host.queue.requeue(this.wakeInjectIds)
+  }
+
+  /**
+   * Stop of a prompt that overtook a waiter's still-queued wake (Claude Code ran the user's prompt
+   * first): the model has not seen the envelope yet and must not be nudged or answered for. The peer
+   * turn waits for the wake's own turn, once: the next prompt without it re-delivers the envelope
+   * (`beginTurn`).
+   */
+  holdForWake(): boolean {
+    if (!this.wakePending || !this.wakeOvertaken || this.wakeHeld) return false
+    if (this.host.queue.peerTurn === null) return false
+    this.wakeHeld = true
+    return true
+  }
+
+  private clearWake(): void {
+    this.wakePending = false
+    this.wakeOvertaken = false
+    this.wakeHeld = false
+    this.wakeInjectIds = []
   }
 
   /** Called after `abandonTurn` (if any) so queued asks start a fresh peer turn. */
@@ -190,6 +240,7 @@ export class Delivery {
 
   noteTurnEnd(): void {
     this.carrierExpected = false
+    this.clearWake()
   }
 
   stop(): void {

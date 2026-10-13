@@ -136,6 +136,13 @@ describe('evaluateGate', () => {
     expect(gate('Task', {}).reason).toMatch(/^agent-peers: /)
   })
 
+  // Live regression: Claude Code defers MCP tools, so a peer turn that cannot call ToolSearch cannot
+  // load peers_reply at all.
+  it('allows ToolSearch, which only loads deferred tool definitions', () => {
+    expect(classifyTool('ToolSearch')).toEqual({ kind: 'meta', name: 'ToolSearch' })
+    expect(decision('ToolSearch', { query: 'select:mcp__plugin_peers_peers__peers_reply' })).toBe('allow')
+  })
+
   it('allows opted-in writes per room, with path checks', () => {
     const p = PeerTurnConfigSchema.parse({ write_allowlist: { room1: ['Edit', 'apply_patch', 'TodoWrite'] } })
     expect(decision('Edit', { file_path: '/ws/a.ts' }, { policy: p })).toBe('allow')

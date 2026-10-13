@@ -92,6 +92,42 @@ describe('claude-code bridge', () => {
     })
   })
 
+  // Live regression: Claude Code's SessionStart carries `model`, but register dropped it, so cards
+  // of Claude Code sessions never showed a model.
+  it('register publishes the SessionStart model on the card', async () => {
+    const { ctl, alice, roomId } = await setup()
+    await ctl('register', { local_key: 'cc-1', source: 'startup', model: 'claude-haiku-5-5' })
+    await eventually(async () => {
+      const { members } = await alice.session.peers(roomId)
+      return members.find((m) => m.handle === 'work')?.card.model === 'claude-haiku-5-5' ? true : undefined
+    })
+  })
+
+  // Live regression: /peers:join in a session that started before any hub was joined. Its
+  // SessionStart register failed (no hub yet), so the model must be re-applied on later hook ops.
+  it('applies the SessionStart model once a first peers_join opened the session', async () => {
+    const alice = await world.peer('alice')
+    const room = await world.room(alice, 'team', 'home')
+    pids += 1
+    const cc = await world.bridge('claude-code', {
+      env: { CLAUDE_CODE_SESSION_ID: 'cc-m', CLAUDECODE: '1' },
+      controlSocket: { runDir: join(world.dir, `run-${pids}`), pid: pids, ancestorPids: [pids, 1] },
+    })
+    const socket = cc.bridge.controlSocketPath as string
+    const ctl = <Op extends ControlOp>(op: Op, params: ControlParamsInput<Op>) =>
+      callControl(socket, op, params, { timeoutMs: 3000 })
+    await expect(
+      ctl('register', { local_key: 'cc-m', source: 'startup', model: 'claude-haiku-5-5' }),
+    ).rejects.toMatchObject({ code: 'unauthorized' })
+    const joined = await cc.call('peers_join', { invite: room.inviteUrl, handle: 'work', remember: 'none' })
+    expect(joined.isError).toBe(false)
+    await ctl('turn_end', { local_key: 'cc-m', inject_ids: [] })
+    await eventually(async () => {
+      const { members } = await alice.session.peers(room.roomId)
+      return members.find((m) => m.handle === 'work')?.card.model === 'claude-haiku-5-5' ? true : undefined
+    })
+  })
+
   it('delivers an ask through wait, nudges once, then auto-replies with the last message', async () => {
     const { ctl, alice, roomId } = await setup()
     await ctl('register', { local_key: 'cc-1', source: 'startup' })

@@ -101,6 +101,24 @@ export function release<M extends InjectMessage>(state: QueueState<M>, injectId:
   }
 }
 
+/**
+ * Hand-outs that were confirmed but never reached the model (a lost asyncRewake wake): back to
+ * pending (claim kept) so the next `take` delivers them again. Unlike `release`, the peer turn is
+ * kept: the re-delivery rejoins it, and its gate must not lift in between.
+ */
+export function requeue<M extends InjectMessage>(
+  state: QueueState<M>,
+  injectIds: readonly string[],
+): QueueState<M> {
+  const ids = new Set(injectIds)
+  const hit = (item: QueueItem<M>) =>
+    (item.state === 'handed_out' || item.state === 'injected') &&
+    item.inject_id !== undefined &&
+    ids.has(item.inject_id)
+  if (!state.items.some(hit)) return state
+  return { ...state, items: state.items.map((item) => (hit(item) ? unlease(item, 'pending') : item)) }
+}
+
 export type ItemFilter = (item: QueueItem) => boolean
 
 /** The first pending item that is not waiting out a claim retry and passes `filter`. */

@@ -84,11 +84,18 @@ export function discoveryCaller(options: DiscoveryOptions): BridgeCaller {
     }
   }
   return {
+    // SessionStart locates before it calls, so locating must honour the startup wait too: Claude Code
+    // starts the hook and the MCP server together, and the bridge is usually not published yet.
     async locate(localKey) {
       if (cached) return cached.pid
-      const [first] = await discoverBridges(target(localKey))
-      cached = first
-      return first?.pid
+      for (let waited = 0; ; waited += DISCOVER_POLL_MS) {
+        const [first] = await discoverBridges(target(localKey))
+        if (first !== undefined || waited >= waitMs) {
+          cached = first
+          return first?.pid
+        }
+        await sleep(DISCOVER_POLL_MS)
+      }
     },
     async call(op, params, callOptions) {
       const bridge = cached

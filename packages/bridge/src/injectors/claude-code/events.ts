@@ -64,6 +64,7 @@ export async function registerSession(ctx: HookContext, input: ClaudeHookInput):
     source,
     ...(supersedes === undefined ? {} : { supersedes }),
     ...(input.cwd === undefined ? {} : { cwd: input.cwd }),
+    ...(input.model ? { model: input.model } : {}),
   })
   return result.context
 }
@@ -99,10 +100,29 @@ async function takeEnvelopes(ctx: HookContext, input: ClaudeHookInput): Promise<
   return taken
 }
 
+const MAX_CARRIED = 16
+
+/**
+ * Ask ids of agent-peers envelopes inside a prompt. Claude Code delivers an asyncRewake wake as a
+ * queued prompt (a `<task-notification>` holding the waiter's stderr), and that fires
+ * UserPromptSubmit too: the bridge must see it as the peer turn's own prompt (live-tested, 2.1.296).
+ */
+export function carriedAskIds(prompt: string | undefined): readonly string[] {
+  if (prompt === undefined || !prompt.includes('[agent-peers] ')) return []
+  const ids = [...prompt.matchAll(/\bask_id ([0-9A-Za-z]{1,64})\b/g)].map((m) => m[1] as string)
+  return [...new Set(ids)].slice(0, MAX_CARRIED)
+}
+
 /** UserPromptSubmit: a new turn (closing a peer turn an interrupted one left open), then `take`. */
 async function promptSubmit(ctx: HookContext, input: ClaudeHookInput): Promise<HookJson> {
+  const carries = carriedAskIds(input.prompt)
   await bestEffort(ctx, 'activity', () =>
-    ctx.caller.call('activity', { ...keyed(input), state: 'busy', turn_start: true }),
+    ctx.caller.call('activity', {
+      ...keyed(input),
+      state: 'busy',
+      turn_start: true,
+      ...(carries.length > 0 ? { carries: [...carries] } : {}),
+    }),
   )
   const envelopes = await takeEnvelopes(ctx, input)
   return additionalContext('UserPromptSubmit', envelopes.join(ENVELOPE_SEPARATOR))

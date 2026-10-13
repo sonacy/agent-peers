@@ -23,6 +23,10 @@ describe('claude-code hooks against a real bridge', () => {
     expect(specific.hookEventName).toBe('SessionStart')
     expect(String(specific.additionalContext)).toContain('@work in room "team"')
     expect(cc.bridge.runtime?.registry.get('cc-1')?.tier).toBe('push')
+    // The fixture's `model` reaches the card (live regression: it used to be dropped).
+    await eventually(() =>
+      cc.bridge.runtime?.registry.get('cc-1')?.handle.view.card.model === 'claude-opus-5' ? true : undefined,
+    )
   })
 
   it('SessionStart after /clear supersedes the conversation this process ran before', async () => {

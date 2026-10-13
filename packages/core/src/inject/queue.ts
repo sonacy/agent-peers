@@ -226,6 +226,11 @@ export class InjectQueue<M extends InjectMessage = InjectMessage> {
     this.set(S.release(this.current, injectId))
   }
 
+  /** These hand-outs never reached the model after all (a lost wake): re-queue them, peer turn kept. */
+  requeue(injectIds: readonly string[]): void {
+    this.set(S.requeue(this.current, injectIds))
+  }
+
   /** `peers_reply` succeeded for this ask. */
   markReplied(askId: string): void {
     this.set(S.markReplied(this.current, askId))

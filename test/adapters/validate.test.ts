@@ -118,7 +118,8 @@ describe('Codex tree problems', () => {
     })
     await editJson(join(dir, 'codex/mcp.json'), (m) => {
       at(m, 'mcpServers', 'peers').command = '/abs/agent-peers'
-      at(m, 'mcpServers', 'peers').cwd = './'
+      delete at(m, 'mcpServers', 'peers').cwd
+      at(m, 'mcpServers', 'peers').env_vars = ['CODEX_HOME']
     })
     await writeFile(join(dir, 'codex/README.md'), '# nothing\n')
     await writeFile(
@@ -138,7 +139,10 @@ describe('Codex tree problems', () => {
     expect(text).toContain('plugin.json hooks: events must be')
     expect(text).toContain('mcp.json: command must be ./bin/agent-peers')
     expect(text).toContain('mcp.json: command must be a bare name or a contained ./ path')
-    expect(text).toContain('mcp.json: leave cwd unset')
+    expect(text).toContain('mcp.json: cwd must be "." (the plugin root)')
+    expect(text).toContain(
+      'mcp.json: env_vars must be CODEX_HOME, CODEX_CLI_PATH, AGENT_PEERS_HOME, AGENT_PEERS_BIN',
+    )
     expect(text).toContain('README.md: must document peers_reply approval_mode')
     expect(text).toContain('skills/ask: name must be "ask"')
     expect(text).toContain('skills/ask: Codex does not substitute $ARGUMENTS')

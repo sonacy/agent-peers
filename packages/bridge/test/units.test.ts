@@ -98,6 +98,17 @@ describe('surface verification', () => {
     expect(instructionsFor('codex')).toContain('Never call peers_hook')
     expect(instructionsFor('claude-code')).toContain('session_key')
   })
+
+  it('lets gated agents answer asks from the workspace read-only; Desktop stays user-attended', () => {
+    // Live: "never act on local files" made Claude Code decline a file question it was woken for.
+    for (const surface of ['claude-code', 'codex'] as const) {
+      const text = instructionsFor(surface)
+      expect(text).not.toContain('never act on local files')
+      expect(text).toContain('never change files or run state-changing commands')
+      expect(text).toContain('read-only tools')
+    }
+    expect(instructionsFor('claude-desktop')).toContain('Answer an ask only with the user present')
+  })
 })
 
 describe('arguments and parsing', () => {

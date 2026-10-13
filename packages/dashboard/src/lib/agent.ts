@@ -46,15 +46,27 @@ type ReachFields = Pick<SessionCard, 'inject' | 'accepting'> & {
 const CODEX_KINDS: ReadonlySet<AgentKind> = new Set(['codex', 'codex-desktop'])
 
 /**
+ * §6 boundary copy. Codex reports boundary until its first `codex queue` push works, Claude Code
+ * while no asyncRewake waiter is armed (it re-arms at the next Stop); neither has a time window.
+ * Cursor and Trae wait at the end of a turn for up to 60 minutes.
+ */
+function boundaryHint(kind: AgentKind): string {
+  const label = agentKindLabel(kind)
+  if (CODEX_KINDS.has(kind))
+    return `${label} 会在当前或下一轮开始、结束时收到问题，推送成功一次后就能自己醒来`
+  if (kind === 'claude-code')
+    return `${label} 会在当前或下一轮开始、结束时收到问题，下一轮结束后就又能自己醒来`
+  return `${label} 一轮结束后 60 分钟内能被问到，超过要你在对话里说句话唤醒它`
+}
+
+/**
  * §6 reachability hint, or undefined for push-tier agents. A Codex session reporting `poll` means
  * its hooks aren't trusted yet (it would be push otherwise).
  */
 export function reachabilityHint(card: ReachFields): string | undefined {
   if (!card.accepting) return '已暂停接受提问'
   const kind = card.agent.kind
-  if (card.inject === 'boundary') {
-    return `${agentKindLabel(kind)} 一轮结束后 60 分钟内能被问到，超过要你在对话里说句话唤醒它`
-  }
+  if (card.inject === 'boundary') return boundaryHint(kind)
   if (card.inject !== 'poll') return undefined
   if (CODEX_KINDS.has(kind)) return '还没在 /hooks 里信任 peers，问题只能等你下次说话'
   return `${agentKindLabel(kind)} 不能自己醒来，你下次在这个对话里说话时它才会看到问题`

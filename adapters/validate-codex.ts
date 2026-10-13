@@ -24,6 +24,19 @@ import {
 import { validateShim, validateSkills } from './validate-shared'
 
 export const CODEX_SHIM_COMMAND = `./${SHIM_PATH}`
+/**
+ * Codex resolves a `./` command against the server's `cwd`, which defaults to the thread's workspace,
+ * so the plugin root must be named explicitly (live-verified on 0.160.1). The bridge takes the
+ * workspace from the hooks' `cwd`, never from its own.
+ */
+export const CODEX_MCP_CWD = '.'
+/** Codex passes MCP servers only a small default environment: these must be forwarded by name. */
+export const CODEX_MCP_ENV_VARS: readonly string[] = [
+  'CODEX_HOME',
+  'CODEX_CLI_PATH',
+  'AGENT_PEERS_HOME',
+  'AGENT_PEERS_BIN',
+]
 /** SessionStart is not turn-scoped in Codex, so only the other events template `${turn_id}`. */
 const TURN_SCOPED: readonly string[] = ['UserPromptSubmit', 'Stop', 'PreToolUse']
 
@@ -87,6 +100,9 @@ export const validateCodexHooks = (manifest: JsonObject): Issues => {
   ]
 }
 
+const stringList = (value: unknown): readonly string[] =>
+  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+
 const validateMcp = (config: JsonObject): Issues => {
   const servers = isObject(config.mcpServers) ? config.mcpServers : {}
   const server = servers[MCP_SERVER_NAME]
@@ -99,7 +115,14 @@ const validateMcp = (config: JsonObject): Issues => {
       sameList(server.args, ['mcp', '--surface', 'codex']),
       'mcp.json: args must be mcp --surface codex',
     ),
-    ...check(server.cwd === undefined, 'mcp.json: leave cwd unset so the bridge sees the workspace'),
+    ...check(
+      server.cwd === CODEX_MCP_CWD,
+      `mcp.json: cwd must be "${CODEX_MCP_CWD}" (the plugin root), or Codex looks for ${CODEX_SHIM_COMMAND} in the workspace`,
+    ),
+    ...check(
+      sameSet(stringList(server.env_vars), CODEX_MCP_ENV_VARS),
+      `mcp.json: env_vars must be ${CODEX_MCP_ENV_VARS.join(', ')}`,
+    ),
   ]
 }
 

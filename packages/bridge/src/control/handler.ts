@@ -62,22 +62,30 @@ export interface HookIdentity {
 }
 
 export class BridgeControl implements ControlHandler {
+  /**
+   * SessionStart's model per local key. Only SessionStart carries it, and its register fails before
+   * the first `peers_join` (no hub yet), so later hook ops re-apply it once the session is open.
+   */
+  private models: ReadonlyMap<string, string> = new Map()
+
   constructor(private readonly rt: Runtime) {}
 
   /** Implicit registration (ONBOARDING §4): any hook op with an unknown key opens its session. */
   session(identity: HookIdentity, source = 'implicit'): Promise<BridgeSession> {
     this.rt.noteHook()
+    const model = identity.model ?? this.models.get(identity.localKey)
     return this.rt.registry.ensure({
       localKey: identity.localKey,
       source,
       hooked: true,
       ...(identity.cwd ? { cwd: identity.cwd } : {}),
-      ...(identity.model ? { model: identity.model } : {}),
+      ...(model ? { model } : {}),
     })
   }
 
   async register(p: ControlParams<'register'>): Promise<ControlResult<'register'>> {
     this.rt.noteHook()
+    if (p.model) this.models = new Map(this.models).set(p.local_key, p.model)
     const supersedes = p.supersedes ?? this.inferSupersedes(p.local_key, p.source)
     const session = await this.rt.registry.ensure({
       localKey: p.local_key,
@@ -85,6 +93,7 @@ export class BridgeControl implements ControlHandler {
       hooked: true,
       ...(supersedes ? { supersedes } : {}),
       ...(p.cwd ? { cwd: p.cwd } : {}),
+      ...(p.model ? { model: p.model } : {}),
     })
     const context = await registerContext(session)
     return context ? { context } : {}
@@ -102,7 +111,7 @@ export class BridgeControl implements ControlHandler {
 
   async activity(p: ControlParams<'activity'>): Promise<ControlResult<'activity'>> {
     const session = await this.session({ localKey: p.local_key })
-    if (p.turn_start === true && p.state === 'busy') await session.turns.begin()
+    if (p.turn_start === true && p.state === 'busy') await session.turns.begin(undefined, p.carries ?? [])
     else session.setActivity(p.state)
     return {}
   }

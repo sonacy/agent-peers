@@ -250,6 +250,8 @@ On submit, go to the room page with the invite panel focused.
 |---|---|
 | push | No hint. |
 | boundary (Cursor, Trae IDE) | `一轮结束后 60 分钟内能被问到，超过要你在对话里说句话唤醒它` |
+| boundary (Codex, Codex Desktop: hooks trusted, no `codex queue` push has worked yet) | `{agent} 会在当前或下一轮开始、结束时收到问题，推送成功一次后就能自己醒来` ("asks arrive when the current or next turn starts or ends; it wakes on its own once a push has worked") |
+| boundary (Claude Code: no asyncRewake waiter armed for 15 s) | `Claude Code 会在当前或下一轮开始、结束时收到问题，下一轮结束后就又能自己醒来` ("asks arrive when the current or next turn starts or ends; it wakes on its own again after the next turn ends") |
 | poll (Claude Desktop) | `Claude Desktop 不能自己醒来，你下次在这个对话里说话时它才会看到问题` ("Claude Desktop can't wake on its own; it sees the question the next time you speak in this conversation") |
 | Codex with hooks not trusted | `还没在 /hooks 里信任 peers，问题只能等你下次说话` ("peers isn't trusted in /hooks yet, so questions wait until you next speak") |
 | Accepting off | `已暂停接受提问` (Paused: not accepting questions) |

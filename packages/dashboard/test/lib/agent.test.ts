@@ -56,6 +56,17 @@ describe('reachabilityHint (§6)', () => {
       'Cursor 一轮结束后 60 分钟内能被问到，超过要你在对话里说句话唤醒它',
     )
   })
+  it('gives Codex and Claude Code their own boundary copy, without the 60-minute window', () => {
+    const hint = (kind: 'codex' | 'codex-desktop' | 'claude-code') =>
+      reachabilityHint({ agent: { kind }, inject: 'boundary', accepting: true })
+    expect(hint('codex')).toBe('Codex 会在当前或下一轮开始、结束时收到问题，推送成功一次后就能自己醒来')
+    expect(hint('codex-desktop')).toStartWith('Codex Desktop 会在当前或下一轮')
+    expect(hint('claude-code')).toBe(
+      'Claude Code 会在当前或下一轮开始、结束时收到问题，下一轮结束后就又能自己醒来',
+    )
+    for (const kind of ['codex', 'codex-desktop', 'claude-code'] as const)
+      expect(hint(kind)).not.toContain('60 分钟')
+  })
   it('explains poll agents, with the Codex hooks case', () => {
     expect(reachabilityHint({ agent: { kind: 'claude-desktop' }, inject: 'poll', accepting: true })).toBe(
       'Claude Desktop 不能自己醒来，你下次在这个对话里说话时它才会看到问题',

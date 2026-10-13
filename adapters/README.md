@@ -95,7 +95,12 @@ UserPromptSubmit/Stop (ONBOARDING §4). Details and the `approval_mode = "approv
 [`codex/README.md`](codex/README.md).
 
 **Codex MCP launch.** `mcp.json` uses `./bin/agent-peers` because Codex only accepts a bare command or a
-contained `./` path. `cwd` stays unset so the bridge sees the workspace; `tool_timeout_sec: 120` covers the
+contained `./` path. Codex resolves that path against the server's `cwd`, which defaults to the thread's
+workspace, so `cwd` is `"."` (the plugin root, as OpenAI's bundled plugins do; without it the server fails
+with `No such file or directory`, live-verified on 0.160.1). The bridge takes the workspace from the hooks'
+`cwd`, never from its own. Codex forwards only a small default environment to MCP servers, so `env_vars`
+names `CODEX_HOME`, `CODEX_CLI_PATH`, `AGENT_PEERS_HOME` and `AGENT_PEERS_BIN`: the bridge's `codex queue`
+must reach the same CODEX_HOME, and a custom agent-peers home must survive. `tool_timeout_sec: 120` covers the
 45 s `peers_ask` wait and the ~50 s `peers_wait` long-poll. Codex desktop uses the same tree with
 `--surface codex`; the bridge detects the desktop at runtime.
 
@@ -127,5 +132,6 @@ skipped, so `bun adapters/build.ts` copies `claude-code/` to `marketplace/plugin
 - **claude.ai / Cowork** refuse plugins with a top-level `bin/`; this plugin targets Claude Code only.
 - **`peers_hook` visibility.** MCP has no hidden tools, so the model sees `peers_hook`. Its description must
   say "never call"; whether Codex can call a tool excluded via `disabled_tools` is unverified.
-- **Live tests still needed:** Codex templating of missing fields, plugin-level `approval_mode`, and the
-  `$peers:ask` mention parse in the Codex TUI.
+- **Live tests still needed:** Codex templating of missing fields and the `$peers:ask` mention parse in the
+  Codex TUI. Plugin-level `approval_mode`, `mcp_tool` hooks, `codex queue` push and `exec resume` are
+  live-verified on 0.160.1 (`codex/README.md`, "Live-verified").

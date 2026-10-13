@@ -33,6 +33,7 @@ export type ToolClass =
   | { readonly kind: 'shell'; readonly name: 'Bash' }
   | { readonly kind: 'write'; readonly name: string }
   | { readonly kind: 'mcp'; readonly name: string; readonly server: string }
+  | { readonly kind: 'meta'; readonly name: string }
   | { readonly kind: 'other'; readonly name: string }
 
 /** Lower-cased surface names → canonical read-only tool names. */
@@ -75,6 +76,14 @@ const WRITE_ALIASES: Readonly<Record<string, string>> = {
   delete_file: 'Write',
 }
 
+/**
+ * Harness tools that only load tool definitions and run nothing. Claude Code defers MCP tools: the
+ * model must call `ToolSearch` before `peers_reply` exists for it, so a peer turn needs it.
+ */
+const META_ALIASES: Readonly<Record<string, string>> = {
+  toolsearch: 'ToolSearch',
+}
+
 /** `peers` as a whole token of the server name: `peers`, `plugin_peers_peers`, `agent-peers-desktop`. */
 const PEERS_SERVER = /(^|[_\-.])peers($|[_\-.])/
 
@@ -114,6 +123,8 @@ export function classifyTool(rawName: string): ToolClass {
   if (SHELL_ALIASES.has(lower)) return { kind: 'shell', name: 'Bash' }
   const write = WRITE_ALIASES[lower]
   if (write) return { kind: 'write', name: write }
+  const meta = META_ALIASES[lower]
+  if (meta) return { kind: 'meta', name: meta }
   return classifyMcp(name) ?? { kind: 'other', name }
 }
 

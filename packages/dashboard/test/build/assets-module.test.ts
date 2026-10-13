@@ -1,14 +1,25 @@
 import { describe, expect, it } from 'bun:test'
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join, relative, sep } from 'node:path'
 import {
   GENERATED_MODULE,
   listFiles,
+  ORGANIZE_IMPORTS_OFF,
   quote,
   renderAssetsModule,
   renderStubModule,
 } from '../../scripts/assets-module'
+
+/** The module as staged in git (the index), or undefined outside a git checkout. */
+function stagedModule(): string | undefined {
+  const repo = Bun.spawnSync(['git', 'rev-parse', '--show-toplevel'], { cwd: dirname(GENERATED_MODULE) })
+  if (repo.exitCode !== 0) return undefined
+  const path = relative(repo.stdout.toString().trim(), GENERATED_MODULE).split(sep).join('/')
+  const show = Bun.spawnSync(['git', 'show', `:${path}`], { cwd: dirname(GENERATED_MODULE) })
+  return show.exitCode === 0 ? show.stdout.toString() : undefined
+}
 
 describe('generated assets module', () => {
   it('the stub embeds nothing', () => {
@@ -18,10 +29,18 @@ describe('generated assets module', () => {
     )
     expect(stub).not.toContain('import ')
   })
-  it('the checked-in module is the stub or a build output', async () => {
+  it('the working-tree module is the stub or a build output whose files all exist', async () => {
     const source = await readFile(GENERATED_MODULE, 'utf8')
-    const isStub = source === renderStubModule()
-    expect(isStub || source.startsWith('// @ts-nocheck')).toBe(true)
+    if (source === renderStubModule()) return
+    expect(source.startsWith('// @ts-nocheck')).toBe(true)
+    const specs = [...source.matchAll(/^import f\d+ from '([^']+)'/gm)].map((m) => m[1] as string)
+    const missing = specs.filter((spec) => !existsSync(join(dirname(GENERATED_MODULE), spec)))
+    expect(missing).toEqual([])
+  })
+  // dist/ is gitignored: a committed build output breaks typecheck, tests and the build on a fresh
+  // clone. `bun run clean` restores the stub before committing.
+  it.skipIf(stagedModule() === undefined)('the version staged in git is the "not built" stub', () => {
+    expect(stagedModule()).toBe(renderStubModule())
   })
   it('imports every file with a file attribute, sorted, relative to the module', () => {
     const source = renderAssetsModule(
@@ -32,6 +51,10 @@ describe('generated assets module', () => {
     expect(source).toContain("import f0 from '../../dist/chunk-a.js' with { type: 'file' }")
     expect(source).toContain("import f1 from '../../dist/fonts/x.woff2' with { type: 'file' }")
     expect(source).toContain("  ['index.html', f2],")
+  })
+  it('turns off Biome import sorting, which would reorder hash-named chunks naturally', () => {
+    const source = renderAssetsModule(['chunk-49gc.js', 'chunk-3797.js'], '/d', '/d')
+    expect(source.split('\n')[1]).toBe(ORGANIZE_IMPORTS_OFF)
   })
   it('prefixes same-directory imports with ./', () => {
     expect(renderAssetsModule(['a.js'], '/x', '/x')).toContain("from './a.js'")

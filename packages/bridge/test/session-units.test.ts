@@ -24,6 +24,9 @@ const ask = (id: string) =>
     text: id,
   }) as unknown as PeerMessage
 
+const reply = (id: string) =>
+  ({ id, room_id: 'r1', kind: 'reply', re: 'X', ts: Date.now(), seq: 2, text: id }) as unknown as PeerMessage
+
 function journal(failInjected = false): SessionJournal {
   return {
     markClaimed: async () => undefined,
@@ -144,5 +147,33 @@ describe('Turns', () => {
     await turns.end({})
     expect(turns.turnId).toBeUndefined()
     expect(turns.gatedAskIds()).toEqual(['A1'])
+  })
+
+  it('confirms what a held Stop reported, and re-delivers a lost wake on the next prompt', async () => {
+    const { queue, delivery, lines } = host()
+    const turns = new Turns({
+      queue,
+      delivery,
+      reply: async () => undefined,
+      setActivity: () => undefined,
+      presence: { noteTurnEnd: () => undefined },
+      log: (line) => lines.push(line),
+    })
+    queue.enqueue(ask('A1'))
+    const wake = await delivery.handOut('wait', 1000)
+    queue.confirm([wake?.inject_id ?? ''])
+    await turns.begin() // the user's prompt overtook the queued wake
+    queue.enqueue(reply('R1'))
+    const taken = await delivery.handOut('take', 1000)
+    expect(await turns.end({ inject_ids: [taken?.inject_id ?? ''] })).toEqual({ kind: 'none' })
+    expect(queue.state.items.map((i) => i.state)).toEqual(['injected', 'injected'])
+    await turns.begin() // still no wake: it was lost
+    expect(queue.peerTurn?.ask_ids).toEqual(['A1'])
+    expect(queue.state.items[0]?.state).toBe('pending')
+    expect(lines.join('\n')).toContain('wake lost')
+    const again = await delivery.handOut('take', 1000)
+    expect(again?.item.id).toBe('A1')
+    const end = await turns.end({ inject_ids: [again?.inject_id ?? ''] })
+    expect(end).toMatchObject({ kind: 'nudge', ask_ids: ['A1'] })
   })
 })

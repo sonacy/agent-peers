@@ -100,3 +100,23 @@ describe('filters', () => {
     expect(queue.pendingCount()).toBe(1)
   })
 })
+
+describe('requeue (a lost wake)', () => {
+  it('puts confirmed hand-outs back to pending and keeps the peer turn', async () => {
+    const { queue } = setup()
+    queue.enqueue(ask('A1'))
+    const out = await queue.next('wait', 100)
+    queue.confirm([out?.inject_id ?? ''])
+    const before = queue.state
+    queue.requeue(['nope'])
+    expect(queue.state).toBe(before)
+    queue.requeue([out?.inject_id ?? ''])
+    expect(queue.state.items[0]).toMatchObject({ state: 'pending', claimed: true })
+    expect(queue.state.items[0]?.inject_id).toBeUndefined()
+    expect(queue.peerTurn?.ask_ids).toEqual(['A1'])
+    const again = await queue.next('take', 100)
+    expect(again?.item.id).toBe('A1')
+    expect(queue.peerTurn?.ask_ids).toEqual(['A1'])
+    expect(queue.peerTurn?.inject_ids).toEqual(['inj1', 'inj2'])
+  })
+})

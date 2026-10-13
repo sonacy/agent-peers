@@ -161,6 +161,8 @@ function gateClass(input: GateInput, ctx: PathContext, tool: ToolClass): GateDec
       return gateShell(input, ctx)
     case 'write':
       return gateWrite(input, ctx, tool.name)
+    case 'meta':
+      return allow(`${tool.name} only loads tool definitions`)
     default:
       if (input.policy.allow_tools.includes(tool.name) || writeAllowed(input, tool.name))
         return allow(`${tool.name} is allowlisted`)

@@ -65,7 +65,15 @@ describe('committed adapter trees', () => {
     }
     const mcp = await readJson(join(ADAPTERS_DIR, 'codex/mcp.json'))
     expect(mcp).toMatchObject({
-      mcpServers: { peers: { command: './bin/agent-peers', args: ['mcp', '--surface', 'codex'] } },
+      mcpServers: {
+        peers: {
+          command: './bin/agent-peers',
+          args: ['mcp', '--surface', 'codex'],
+          // Codex resolves `./` against cwd (default: the workspace) and forwards only listed env.
+          cwd: '.',
+          env_vars: expect.arrayContaining(['CODEX_HOME', 'AGENT_PEERS_HOME', 'AGENT_PEERS_BIN']),
+        },
+      },
     })
   })
 

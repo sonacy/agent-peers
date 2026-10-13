@@ -112,11 +112,25 @@ export async function runTool(
   }
 }
 
-const toCallResult = (result: ToolResult): CallToolResult => ({
-  content: [{ type: 'text', text: result.text }],
-  ...(result.structured ? { structuredContent: { ...result.structured } } : {}),
-  ...(result.isError ? { isError: true } : {}),
-})
+/**
+ * Claude Code (2.1.296, live-tested) hands the model `structuredContent` INSTEAD of the text block
+ * whenever it is present, so the structured payload repeats the text: otherwise the model would
+ * lose inline replies, inbox envelopes and their untrusted-input framing. `peers_hook` output is
+ * Codex hook JSON and stays exactly as it is.
+ */
+export function toCallResult(result: ToolResult, withText = true): CallToolResult {
+  const structured =
+    result.structured === undefined
+      ? undefined
+      : withText
+        ? { text: result.text, ...result.structured }
+        : { ...result.structured }
+  return {
+    content: [{ type: 'text', text: result.text }],
+    ...(structured ? { structuredContent: structured } : {}),
+    ...(result.isError ? { isError: true } : {}),
+  }
+}
 
 export function createMcpServer(instructions: string, hooks: McpServerHooks): Server {
   const server = new Server(
@@ -145,7 +159,10 @@ export function createMcpServer(instructions: string, hooks: McpServerHooks): Se
         errorResult(new PeersError('method_not_found', `unknown tool ${request.params.name}`)),
       )
     const call = callIdentity(request.params.arguments, request.params._meta, extra.signal)
-    return toCallResult(await runTool(rt, tool, request.params.arguments ?? {}, call))
+    return toCallResult(
+      await runTool(rt, tool, request.params.arguments ?? {}, call),
+      tool.name !== HOOK_TOOL,
+    )
   })
   return server
 }

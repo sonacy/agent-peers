@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mkdir, realpath, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, symlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { type ControlOp, type ControlParamsInput, callControl } from '@agent-peers/core'
-import { claudeCodeInjector } from '../src/injectors/claude-code/injector'
 import { INJECT_LEASE_MS } from '../src/session/bridge-session'
 import { WAITER_GRACE_MS } from '../src/session/presence'
-import { type BridgeHarness, eventually, type Peer, startWorld, type World } from './helpers/world'
+import { nextPid, ccSession as session, setupClaude } from './helpers/claude-session'
+import { eventually, startWorld, type World } from './helpers/world'
 
 let world: World
-let pids = 5300
 
 beforeEach(async () => {
   world = await startWorld()
@@ -17,59 +16,7 @@ afterEach(async () => {
   await world.stop()
 })
 
-/** A clock the test can move forward (lease expiry, waiter grace). */
-function offsetClock() {
-  let offset = 0
-  return {
-    clock: {
-      now: () => Date.now() + offset,
-      setTimeout: (fn: () => void, ms: number) => setTimeout(fn, ms),
-      clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
-    },
-    advance: (ms: number) => {
-      offset += ms
-    },
-  }
-}
-
-interface Setup {
-  readonly alice: Peer
-  readonly cc: BridgeHarness
-  readonly roomId: string
-  readonly workspace: string
-  readonly advance: (ms: number) => void
-  ctl<Op extends ControlOp>(op: Op, params: ControlParamsInput<Op>): ReturnType<typeof callControl<Op>>
-}
-
-async function setup(options: { injector?: boolean } = {}): Promise<Setup> {
-  const alice = await world.peer('alice')
-  const room = await world.room(alice, 'team', 'home')
-  const workspace = join(world.dir, `ws-${pids}`)
-  await mkdir(workspace, { recursive: true })
-  pids += 1
-  const { clock, advance } = offsetClock()
-  const cc = await world.bridge('claude-code', {
-    token: world.member('carol'),
-    env: { CLAUDE_CODE_SESSION_ID: 'cc-1', CLAUDECODE: '1' },
-    cwd: workspace,
-    clock,
-    ...(options.injector ? { injector: claudeCodeInjector() } : {}),
-    controlSocket: { runDir: join(world.dir, `run-${pids}`), pid: pids, ancestorPids: [pids, 1] },
-  })
-  const joined = await cc.call('peers_join', { invite: room.code, handle: 'work', remember: 'none' })
-  expect(joined.isError).toBe(false)
-  const socket = cc.bridge.controlSocketPath as string
-  return {
-    alice,
-    cc,
-    roomId: room.roomId,
-    workspace: await realpath(workspace),
-    advance,
-    ctl: (op, params) => callControl(socket, op, params, { timeoutMs: 5000 }),
-  }
-}
-
-const session = (cc: BridgeHarness) => cc.bridge.runtime?.registry.get('cc-1')
+const setup = (options: { injector?: boolean } = {}) => setupClaude(world, options)
 
 describe('the asyncRewake waiter and the turn boundary', () => {
   it('never hands out while the session is mid-turn: the wake waits for Stop', async () => {
@@ -225,15 +172,15 @@ describe('peers_inbox and the budget', () => {
   it('hands over-budget asks out inside a gated peer turn; pre-approval follows the gate', async () => {
     const alice = await world.peer('alice')
     const room = await world.room(alice, 'team', 'home')
-    pids += 1
-    const home = join(world.dir, `budget-${pids}`)
+    const pid = nextPid()
+    const home = join(world.dir, `budget-${pid}`)
     await mkdir(home, { recursive: true })
     await writeFile(join(home, 'config.json'), JSON.stringify({ injection: { peer_turns_per_hour: 0 } }))
     const cc = await world.bridge('claude-code', {
       token: world.member('carol'),
       homeDir: home,
       env: { CLAUDE_CODE_SESSION_ID: 'cc-1', CLAUDECODE: '1' },
-      controlSocket: { runDir: join(world.dir, `run-${pids}`), pid: pids, ancestorPids: [pids, 1] },
+      controlSocket: { runDir: join(world.dir, `run-${pid}`), pid, ancestorPids: [pid, 1] },
     })
     await cc.call('peers_join', { invite: room.code, handle: 'work', remember: 'none' })
     const ctl = <Op extends ControlOp>(op: Op, params: ControlParamsInput<Op>) =>

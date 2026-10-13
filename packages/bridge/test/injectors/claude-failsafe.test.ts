@@ -174,6 +174,53 @@ describe('discoveryCaller', () => {
     })
   })
 
+  // Live regression: SessionStart calls `locate` before `register`, and used to give up at once while
+  // the bridge (started at the same moment by Claude Code) had not published itself yet.
+  it('locate also waits for a bridge that is still starting', async () => {
+    const runDir = join(dir, 'run-locate')
+    const handler: ControlHandler = {
+      register: async () => ({ context: 'late' }),
+      activity: async () => ({}),
+      take: async () => null,
+      wait: async () => null,
+      turn_end: async () => ({}),
+      end: async () => ({}),
+      gate: async () => ({ decision: 'allow', reason: 'late' }),
+      permission: async () => ({}),
+      autojoin: async () => ({ accepted: true }),
+    }
+    let started: ControlServer | undefined
+    let naps = 0
+    const sleep = async () => {
+      naps++
+      if (naps === 2) {
+        started = await ControlServer.start({
+          runDir,
+          handler,
+          agentKind: 'claude-code',
+          pid: 102,
+          agentPid: 50,
+          ancestorPids: [102, 50],
+        })
+      }
+    }
+    const c = discoveryCaller({ runDir, pid: 900, tree: tree(() => [102]), sleep, discoverWaitMs: 1000 })
+    try {
+      expect(await c.locate('k')).toBe(102)
+      expect(naps).toBe(2)
+    } finally {
+      await started?.close()
+    }
+    const none = discoveryCaller({
+      runDir: join(dir, 'run-locate-none'),
+      pid: 900,
+      tree: tree(() => []),
+      sleep: async () => undefined,
+      discoverWaitMs: 300,
+    })
+    expect(await none.locate('k')).toBeUndefined()
+  })
+
   it('discovers once per hook process and rediscovers a restarted bridge', async () => {
     const runDir = join(dir, 'run')
     const handler = (tag: string): ControlHandler => ({

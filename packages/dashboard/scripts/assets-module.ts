@@ -23,6 +23,9 @@ const toPosix = (path: string): string => path.split(sep).join('/')
 /** A single-quoted JS string literal (the repo's Biome style). */
 export const quote = (value: string): string => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
 
+export const ORGANIZE_IMPORTS_OFF =
+  '// biome-ignore-all assist/source/organizeImports: hash-named build outputs, emitted in a stable order'
+
 /** `files` are paths below `distDir`; imports are written relative to the module's directory. */
 export function renderAssetsModule(files: readonly string[], distDir: string, moduleDir: string): string {
   const sorted = [...files].map(toPosix).sort()
@@ -35,6 +38,8 @@ export function renderAssetsModule(files: readonly string[], distDir: string, mo
   return [
     // The built files are plain JS/CSS/fonts with no type declarations.
     '// @ts-nocheck',
+    // Biome sorts imports naturally (chunk-49… before chunk-3797…); hash names make that unstable.
+    ORGANIZE_IMPORTS_OFF,
     HEADER,
     ...imports,
     '',

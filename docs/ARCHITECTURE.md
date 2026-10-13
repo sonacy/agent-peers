@@ -81,6 +81,8 @@ It works across agent products. Wire protocol: [`PROTOCOL.md`](./PROTOCOL.md). P
 - Adapters on multi-session hosts (Codex, Cursor) tell the model its key at session start (`additionalContext` / `additional_context`), along the lines of "pass session_key=<id> on every peers_* call".
 - Hook-based stamping (Cursor `preToolUse` / `beforeMCPExecution`) is used only once `doctor` proves it rewrites MCP tool arguments.
 
+**Tool results.** A tool returns its text and, for some tools, `structuredContent`. Claude Code (2.1.296, live-tested) shows the model `structuredContent` *instead of* the text block whenever it is present, so every tool except the Codex-only `peers_hook` repeats its text as `structuredContent.text`. Without it the model would lose inline replies, inbox envelopes and their untrusted-input framing.
+
 ### 3.2 What the user types, per agent
 
 | Agent | ask | Mechanism |
@@ -96,7 +98,7 @@ It works across agent products. Wire protocol: [`PROTOCOL.md`](./PROTOCOL.md). P
 | Trae IDE _(post-v0)_ | `/peers-ask @work …` | `~/.trae/commands/peers-ask.md` |
 | Trae CLI _(post-v0)_ | `$peers:ask` (unverified), or plain language | Codex-style plugin and skill |
 
-Claude Code already has a built-in `/peers` (an alias of `/list-agents`). `/peers:ask` is namespaced, but this needs a live test. The fallback is plugin name `agent-peers`.
+Claude Code already has a built-in `/peers` (an alias of `/list-agents`). `/peers:ask` is namespaced; the live suite (`test/live/claude-code.live.test.ts`, 2.1.296 under `-p`) runs `/peers:join`, `/peers:ask` and `/peers:rename` without a conflict. The interactive autocomplete is still unchecked. The fallback is plugin name `agent-peers`.
 
 ## 4. Installer (`npx @agent-peers/cli add`)
 
@@ -180,8 +182,8 @@ Shims must `exec` the real binary.
 
 | Op | Semantics |
 |---|---|
-| `register {source, supersedes?}` | SessionStart. On `/clear`, `/resume` or `/branch`, the hook passes the previous key, and the bridge calls `session.open { supersedes }`. |
-| `activity {state, turn_start?}` | prompt-submit / stop / notification hooks. `turn_start` (UserPromptSubmit): a peer turn an interrupted or failed turn left open is closed first, with "no reply". |
+| `register {source, supersedes?, model?}` | SessionStart. On `/clear`, `/resume` or `/branch`, the hook passes the previous key, and the bridge calls `session.open { supersedes }`. `model` (when Claude Code sends it; it omits it under `-p`) goes on the card, also when this register fails before the first join. |
+| `activity {state, turn_start?, carries?}` | prompt-submit / stop / notification hooks. `turn_start` (UserPromptSubmit): a peer turn an interrupted or failed turn left open is closed first, with "no reply". `carries`: ask ids of envelopes inside the prompt itself. Claude Code submits an asyncRewake wake as a queued prompt that fires UserPromptSubmit, sometimes after the user's own prompt; neither closes the woken peer turn, and the Stop of a prompt that overtook the queued wake does not nudge (it still confirms that prompt's `inject_ids`). That hold happens once: if the next prompt does not carry the wake either, the wake is taken as lost (Esc dropped it), its envelope goes back to the queue, and that prompt's `take` delivers it inline, so the model never runs a gated turn for an ask it has not seen. |
 | `take {max_chars}` → envelope + `inject_id` | **Atomic take.** The bridge first `ask.claim`s each ask, then hands out each envelope exactly once and journals it as injected via that channel. |
 | `wait {timeout}` → envelope + `inject_id` | Long-poll version of `take`. **Only one waiter per `local_key`**: a new `wait` makes the previous one exit 0. It hands out nothing while the session is mid-turn (`busy`, `awaiting_input`): a wake always starts its own turn, after Stop's `turn_end`. |
 | `turn_end {inject_ids, last_message}` | Turn finished. Drives the reply fallback (PROTOCOL §7.3) and clears the peer-turn state. |
@@ -246,7 +248,7 @@ The Codex CLI also uses `x-codex-turn-metadata` and `mcp_tool` hooks, which repl
   - Version ≥ 0.157.
   - Not `--no-daemon`, `--profile` or `CODEX_EXEC_SERVER_URL`.
   - An interrupted thread waits for the user's next prompt.
-- **MCP launch.** The `command` must be a bare name or a `./` path, so use a bundled `./bin/agent-peers` shim that `exec`s node.
+- **MCP launch.** The `command` must be a bare name or a `./` path, so use a bundled `./bin/agent-peers` shim that `exec`s the binary, with `cwd: "."` (Codex resolves `./` against `cwd`, which defaults to the workspace) and `env_vars` forwarding `CODEX_HOME`, `CODEX_CLI_PATH`, `AGENT_PEERS_HOME` and `AGENT_PEERS_BIN` (Codex passes MCP servers only a small default environment).
 - **Native overlap.** `ext/agent-message-board` (0.161+) is under development.
 
 **Cursor IDE** (plugin `agent-peers`)
@@ -316,7 +318,9 @@ Binding `0.0.0.0:7337` makes the hub reachable **only from the same LAN**. For t
 2. During a peer turn, the adapter's tool gate (§6.1) **denies every tool not on the receiver's allowlist**:
    - The allowlist comes from `~/.agent-peers/config.json`.
    - Default: read-only tools (Read/Grep/Glob, `git log/diff/show/status`, `rg`), plus `peers_reply` and `peers_progress` for the claimed `ask_id`.
+   - Claude Code's `ToolSearch` is always allowed: it only loads deferred tool definitions (MCP tools such as `peers_reply` must be loaded through it before the model can call them) and runs nothing.
    - `--write` asks (`meta.mode: write`) never widen the allowlist. **mode is a label, not a control.** The receiver opts in with a separate `write_allowlist` per room.
+   - The prompts agree: the ASK envelope says "Answer from this workspace", and the MCP server instructions of gated agents (Claude Code, Codex) say a read-only answer from the workspace is expected while files must not be changed for a peer. Claude Desktop, which has no gate, keeps the stricter "never act on local files or tools without the user's approval". (Live: the stricter wording made Claude Code decline a file question it was woken for.)
 3. During a peer turn, `peers_send`, `peers_ask`, `peers_join`, `peers_leave`, `peers_create` and `peers_invite` are denied. This blocks worm and exfiltration chains, where a peer turn asks a third agent or joins an attacker's hub.
 4. `peers_join`, `peers_create` and `peers_invite` are **never** auto-approved. The user always sees the hub host when joining.
 5. If the agent cannot gate tools, or `doctor` finds the gate inactive, the session is downgraded: asks go to `peers_inbox` for the local user instead of auto-injecting. Unattended channels (`wait`, `peers_wait`, push) never hand out an ask while a gated surface's hooks have not reached the bridge.

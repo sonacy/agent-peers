@@ -49,8 +49,9 @@ export class Turns {
     if (turnId !== undefined) this.namedTurns = true
   }
 
-  async begin(turnId?: string): Promise<void> {
-    const { stale, carrier } = this.host.delivery.beginTurn()
+  /** `carries`: ask ids of our envelopes inside the prompt itself (a delivered wake). */
+  async begin(turnId?: string, carries: readonly string[] = []): Promise<void> {
+    const { stale, carrier } = this.host.delivery.beginTurn(carries)
     const sameTurn = turnId !== undefined && turnId === this.boundTurnId
     if (stale && !sameTurn) await this.sendFallbacks(this.host.queue.abandonTurn())
     this.host.delivery.activateQueued()
@@ -62,6 +63,12 @@ export class Turns {
   }
 
   async end(input: { inject_ids?: readonly string[]; last_message?: string }): Promise<TurnEndOutcome> {
+    if (this.host.delivery.holdForWake()) {
+      // The peer turn waits, but what this prompt's hooks handed out did reach the model (as turnEnd).
+      this.host.queue.confirm(input.inject_ids ?? [])
+      this.host.presence.noteTurnEnd()
+      return { kind: 'none' }
+    }
     const outcome = this.host.queue.turnEnd(input)
     this.host.delivery.noteTurnEnd()
     this.host.presence.noteTurnEnd()
