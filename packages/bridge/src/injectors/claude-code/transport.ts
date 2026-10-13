@@ -37,7 +37,18 @@ export interface DiscoveryOptions {
   /** The hook's own PID (default `process.pid`); discovery walks its ancestors. */
   readonly pid?: number
   readonly tree?: ProcessTree
+  /**
+   * How long to keep looking when no bridge answers yet. Claude Code starts hooks and the MCP server
+   * at the same time, so a SessionStart hook can run before the bridge has published `run/<pid>.json`.
+   */
+  readonly discoverWaitMs?: number
+  /** Injectable for tests. */
+  readonly sleep?: (ms: number) => Promise<void>
 }
+
+/** Default wait for a bridge that is still starting (it runs `ps` before publishing its info file). */
+export const DEFAULT_DISCOVER_WAIT_MS = 3000
+const DISCOVER_POLL_MS = 100
 
 /**
  * Discovers the bridge serving this hook's agent process once per hook process (each discovery
@@ -52,15 +63,25 @@ export function discoveryCaller(options: DiscoveryOptions): BridgeCaller {
     ...(options.tree === undefined ? {} : { tree: options.tree }),
   })
   let cached: BridgeInfo | undefined
+  const waitMs = options.discoverWaitMs ?? 0
+  const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms))
   const discover = async <Op extends ControlOp>(
     op: Op,
     params: ControlParamsInput<Op>,
     callOptions: CallOptions | undefined,
   ): Promise<BridgeCall<Op>> => {
     const localKey = (params as { local_key?: string }).local_key
-    const { bridge, result } = await callBridge(target(localKey), op, params, callOptions)
-    cached = bridge
-    return { bridgePid: bridge.pid, result }
+    for (let waited = 0; ; waited += DISCOVER_POLL_MS) {
+      try {
+        const { bridge, result } = await callBridge(target(localKey), op, params, callOptions)
+        cached = bridge
+        return { bridgePid: bridge.pid, result }
+      } catch (error) {
+        // Only "no bridge yet / not reachable" is worth waiting for; anything else is a real answer.
+        if (!isPeersError(error, 'not_connected') || waited >= waitMs) throw error
+        await sleep(DISCOVER_POLL_MS)
+      }
+    }
   }
   return {
     async locate(localKey) {

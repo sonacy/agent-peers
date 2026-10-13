@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { runHookCommand } from '../src/commands/hook'
+import { DEFAULT_DISCOVER_WAIT_MS } from '@agent-peers/bridge'
+import { discoverWaitMs, runHookCommand } from '../src/commands/hook'
 import { processIo, readStream } from '../src/io'
 import { main } from '../src/program'
 import { type CliWorld, memoryIo, startCliWorld } from './helpers/world'
@@ -69,13 +70,37 @@ describe('agent-peers hook (claude-code) against a running bridge', () => {
 
   it('runs in-process with the default discovery: prompt submit injects, stop nudges', async () => {
     const asked = await world.alice.ask({ room_id: world.roomId, to: 'work', text: 'which port?' })
-    await Bun.sleep(100)
+    // Wait until the bridge has the ask (the hub marks it delivered on the bridge's ack); a fixed
+    // sleep raced on slower CI machines.
+    const deadline = Date.now() + 10_000
+    while ((await world.alice.getAsk(asked.id)).ask.state !== 'delivered') {
+      if (Date.now() > deadline) throw new Error('the bridge never received the ask')
+      await Bun.sleep(25)
+    }
+    // A user prompt always comes after the session is up: wait for the bridge to publish run/<pid>.json.
+    const { readdir } = await import('node:fs/promises')
+    while (
+      !(await readdir(join(world.home, 'run')).catch(() => [] as string[])).some((f) => f.endsWith('.json'))
+    ) {
+      if (Date.now() > deadline) throw new Error('the bridge never published its run file')
+      await Bun.sleep(25)
+    }
     const prompt = memoryIo(world.env, await fixture('UserPromptSubmit', { session_id: 'cc-1' }))
     expect(await runHookCommand('user-prompt-submit', { agent: 'claude-code' }, prompt)).toBe(0)
     expect(prompt.out.join('')).toContain(`ask_id ${asked.id}`)
     const stop = memoryIo(world.env, await fixture('Stop', { session_id: 'cc-1' }))
     expect(await main(['hook', 'stop', '--agent', 'claude-code'], stop)).toBe(0)
     expect(JSON.parse(stop.out.join('')).decision).toBe('block')
+  })
+})
+
+describe('discoverWaitMs', () => {
+  it('defaults to the startup wait and honours AGENT_PEERS_DISCOVER_WAIT_MS', () => {
+    expect(discoverWaitMs({})).toBe(DEFAULT_DISCOVER_WAIT_MS)
+    expect(discoverWaitMs({ AGENT_PEERS_DISCOVER_WAIT_MS: '250' })).toBe(250)
+    expect(discoverWaitMs({ AGENT_PEERS_DISCOVER_WAIT_MS: '0' })).toBe(0)
+    expect(discoverWaitMs({ AGENT_PEERS_DISCOVER_WAIT_MS: 'soon' })).toBe(DEFAULT_DISCOVER_WAIT_MS)
+    expect(discoverWaitMs({ AGENT_PEERS_DISCOVER_WAIT_MS: ' ' })).toBe(DEFAULT_DISCOVER_WAIT_MS)
   })
 })
 

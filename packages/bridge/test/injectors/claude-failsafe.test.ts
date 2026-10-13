@@ -12,7 +12,7 @@ import {
 } from '@agent-peers/core'
 import { type ErrorCode, PeersError } from '@agent-peers/protocol'
 import { gateInput, MAX_GATE_INPUT_CHARS } from '../../src/injectors/claude-code/events'
-import { runClaudeHook } from '../../src/injectors/claude-code/run'
+import { racesBridgeStartup, runClaudeHook } from '../../src/injectors/claude-code/run'
 import { HookState } from '../../src/injectors/claude-code/state'
 import { type BridgeCaller, discoveryCaller } from '../../src/injectors/claude-code/transport'
 
@@ -126,6 +126,54 @@ describe('discoveryCaller', () => {
     isAlive: (pid) => alive().includes(pid),
   })
 
+  it('waits for a bridge that is still starting, then gives up with not_connected', async () => {
+    const runDir = join(dir, 'run-late')
+    const handler: ControlHandler = {
+      register: async () => ({ context: 'late' }),
+      activity: async () => ({}),
+      take: async () => null,
+      wait: async () => null,
+      turn_end: async () => ({}),
+      end: async () => ({}),
+      gate: async () => ({ decision: 'allow', reason: 'late' }),
+      permission: async () => ({}),
+      autojoin: async () => ({ accepted: true }),
+    }
+    let started: ControlServer | undefined
+    let naps = 0
+    const sleep = async () => {
+      naps++
+      if (naps === 3) {
+        started = await ControlServer.start({
+          runDir,
+          handler,
+          agentKind: 'claude-code',
+          pid: 101,
+          agentPid: 50,
+          ancestorPids: [101, 50],
+        })
+      }
+    }
+    const c = discoveryCaller({ runDir, pid: 900, tree: tree(() => [101]), sleep, discoverWaitMs: 1000 })
+    try {
+      const call = await c.call('gate', { local_key: 'k', tool: 'Read', input: {} })
+      expect(call.bridgePid).toBe(101)
+      expect(naps).toBe(3)
+    } finally {
+      await started?.close()
+    }
+    const none = discoveryCaller({
+      runDir: join(dir, 'run-none'),
+      pid: 900,
+      tree: tree(() => []),
+      sleep: async () => undefined,
+      discoverWaitMs: 300,
+    })
+    await expect(none.call('gate', { local_key: 'k', tool: 'Read', input: {} })).rejects.toMatchObject({
+      code: 'not_connected',
+    })
+  })
+
   it('discovers once per hook process and rediscovers a restarted bridge', async () => {
     const runDir = join(dir, 'run')
     const handler = (tag: string): ControlHandler => ({
@@ -168,5 +216,17 @@ describe('discoveryCaller', () => {
     } finally {
       await second.close()
     }
+  })
+})
+
+describe('racesBridgeStartup', () => {
+  it('waits only for SessionStart and the waiter', () => {
+    expect(racesBridgeStartup('session-start', undefined)).toBe(true)
+    expect(racesBridgeStartup('SessionStart', undefined)).toBe(true)
+    expect(racesBridgeStartup('wait', undefined)).toBe(true)
+    expect(racesBridgeStartup('stop', true)).toBe(true)
+    expect(racesBridgeStartup('pre-tool-use', undefined)).toBe(false)
+    expect(racesBridgeStartup('user-prompt-submit', false)).toBe(false)
+    expect(racesBridgeStartup('not-an-event', undefined)).toBe(false)
   })
 })

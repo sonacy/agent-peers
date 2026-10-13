@@ -6,10 +6,12 @@
  */
 import {
   type ClaudeHookDeps,
+  DEFAULT_DISCOVER_WAIT_MS,
   DEFAULT_WAIT_TIMEOUT_S,
   defaultClaudeHookDeps,
   fileLogger,
   hookLogPath,
+  racesBridgeStartup,
   runClaudeHook,
 } from '@agent-peers/bridge'
 import { peersPaths, resolvePeersHome } from '@agent-peers/core'
@@ -42,6 +44,14 @@ function parseSeconds(value: string): number {
   return seconds
 }
 
+/** `AGENT_PEERS_DISCOVER_WAIT_MS` overrides how long startup-racing hooks look for the bridge. */
+export function discoverWaitMs(env: Readonly<Record<string, string | undefined>>): number {
+  const raw = env.AGENT_PEERS_DISCOVER_WAIT_MS
+  if (raw === undefined || raw.trim() === '') return DEFAULT_DISCOVER_WAIT_MS
+  const value = Number(raw)
+  return Number.isInteger(value) && value >= 0 ? value : DEFAULT_DISCOVER_WAIT_MS
+}
+
 /** Logs to the hook log; never throws (the hook must still answer). */
 async function logWarning(io: CliIo, line: string): Promise<void> {
   const root = resolvePeersHome(io.env)
@@ -62,7 +72,11 @@ export async function runHookCommand(
     }
     const stdin = await io.readStdin()
     const claude =
-      deps.claude?.(io) ?? defaultClaudeHookDeps(io.env, { stderr: (line) => io.stderr(`${line}\n`) })
+      deps.claude?.(io) ??
+      defaultClaudeHookDeps(io.env, {
+        stderr: (line) => io.stderr(`${line}\n`),
+        discoverWaitMs: racesBridgeStartup(event, options.wait) ? discoverWaitMs(io.env) : 0,
+      })
     const result = await runClaudeHook(
       {
         event,

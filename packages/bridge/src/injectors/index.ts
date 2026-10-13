@@ -20,12 +20,13 @@ export type { ClaudeHookDeps, ClaudeHookRequest } from './claude-code/run'
 export {
   DEFAULT_WAIT_TIMEOUT_S,
   defaultClaudeHookDeps,
+  racesBridgeStartup,
   runClaudeHook,
   WAIT_EXIT_MARGIN_MS,
 } from './claude-code/run'
 export { HookState } from './claude-code/state'
 export type { BridgeCall, BridgeCaller } from './claude-code/transport'
-export { discoveryCaller } from './claude-code/transport'
+export { DEFAULT_DISCOVER_WAIT_MS, discoveryCaller } from './claude-code/transport'
 export type { WaiterOptions } from './claude-code/waiter'
 export type { BinaryPreference, CodexBinary } from './codex/binary'
 export { CODEX_BUNDLE_PATHS, MIN_QUEUE_VERSION, resolveCodexBinary } from './codex/binary'

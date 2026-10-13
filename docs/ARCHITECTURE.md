@@ -171,6 +171,7 @@ Hook processes are short-lived and separate from the bridge. They talk to it ove
 3. If several bridges match, it picks the one that owns its `local_key`. For `register`, it sends to all of them.
 4. Sockets whose PID is dead are removed.
 5. If no bridge is found, the hook logs a visible warning.
+6. **Startup race.** Claude Code starts hooks and the MCP server at the same moment, so SessionStart and the asyncRewake waiter keep looking for the bridge for up to 3 s (`AGENT_PEERS_DISCOVER_WAIT_MS`) while it publishes `run/<pid>.json`. Every other hook gives up immediately, so a missing bridge never slows down prompts or tool calls.
 6. A hook process resolves its bridge once and reuses it; it rediscovers only when that bridge is gone.
 
 Shims must `exec` the real binary.

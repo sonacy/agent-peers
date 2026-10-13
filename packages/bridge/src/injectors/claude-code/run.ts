@@ -63,6 +63,11 @@ export function defaultClaudeHookDeps(
     readonly pid?: number
     readonly tree?: ProcessTree
     readonly stderr?: (line: string) => void
+    /**
+     * Wait for a bridge that is still starting. Only SessionStart and the waiter race the MCP
+     * server's startup; other hooks fail fast so a missing bridge never slows down tool calls.
+     */
+    readonly discoverWaitMs?: number
   } = {},
 ): ClaudeHookDeps {
   const paths = peersPaths(resolvePeersHome(env))
@@ -72,6 +77,7 @@ export function defaultClaudeHookDeps(
       runDir: paths.run,
       ...(options.pid === undefined ? {} : { pid: options.pid }),
       ...(options.tree === undefined ? {} : { tree: options.tree }),
+      discoverWaitMs: options.discoverWaitMs ?? 0,
     }),
     state: new HookState(paths.run),
     log: fileLogger(hookLogPath(paths.root), stderr),
@@ -82,6 +88,13 @@ function waiterOptions(request: ClaudeHookRequest): WaiterOptions {
   const seconds = request.timeoutSeconds ?? DEFAULT_WAIT_TIMEOUT_S
   const budgetMs = Math.max(0, seconds * 1000 - WAIT_EXIT_MARGIN_MS)
   return { budgetMs, ...request.waiter }
+}
+
+/** Hooks that can fire before the bridge has published itself (Claude starts both together). */
+export function racesBridgeStartup(event: string, wait: boolean | undefined): boolean {
+  if (wait === true) return true
+  const normalized = normalizeEvent(event)
+  return normalized === 'wait' || normalized === 'SessionStart'
 }
 
 async function dispatch(
